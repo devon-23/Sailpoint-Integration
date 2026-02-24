@@ -1,0 +1,91 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE Rule PUBLIC "sailpoint.dtd" "sailpoint.dtd">
+<Rule created="1734103283241" id="a8a231a893bb10fb8193c09c36295124" language="beanshell" modified="1762274759243" name="Ops Util Single Account Aggregation Rule" significantModified="1762274759243">
+  <Description>
+    This rule is for testing from debug pages
+  </Description>
+  <Source>
+
+  import sailpoint.tools.Util;
+  import sailpoint.object.*;
+  import openconnector.connector.*;
+  import sailpoint.connector.Connector;
+  import sailpoint.api.Aggregator;
+  import sailpoint.object.TaskResult.CompletionStatus;
+  import sailpoint.tools.Message.Type;
+  import sailpoint.tools.Message;
+  import sailpoint.tools.Util;
+
+  try {
+    applicationName = taskResult.getDefinition().getString("application");
+    correlate = taskResult.getDefinition().getBoolean("correlate");
+    ids = taskResult.getDefinition().getString("ids");
+
+    if (taskResult.getDefinition().getString("delimiter") != null) {
+      delimiter = taskResult.getDefinition().getString("delimiter");
+      delimiter.trim();
+      taskResult.addMessage("delimiter === " + delimiter);
+    }
+
+    taskResult.addMessage("ids === " + ids);
+    taskResult.addMessage("application === " + applicationName);
+    taskResult.addMessage("correlate === " + correlate);
+
+    Application appObject = context.getObjectByName(Application.class, applicationName);
+    Connector appConnector = sailpoint.connector.ConnectorFactory.getConnector(appObject, null);
+
+    Attributes argMap = new Attributes();
+
+    if (correlate) {
+      argMap.put("correlateOnly", "true");
+    }
+
+    argMap.put("noOptimizeReaggregation", "true");
+
+    Aggregator agg = new Aggregator(context, argMap);
+
+    if (null == agg) {
+      Message emsg = new Message(Message.Type.Warn, "Null Aggregator returned from constructor. Unable to Aggregate!", new Object[] {});
+      taskResult.addMessage(emsg);
+      return emsg;
+    }
+
+    if (taskResult.getDefinition().getString("delimiter") != null) { // Multiple IDs  if (delimiter != null) { 
+      String[] idArray = ids.split(delimiter); // Split the ids string into an array
+      for (String id : idArray) {
+        ResourceObject resourceObject = appConnector.getObject("account", id.trim(), null); // Trim to remove any extra spaces
+        TaskResult tr = agg.aggregate(appObject, resourceObject);
+
+        if (null == tr) {
+          Message emsg = new Message(Message.Type.Warn, "ERROR: Null taskResult returned from aggregate() call for ID: " + id, new Object[] {});
+          taskResult.addMessage(emsg);
+          return emsg;
+        }
+      }
+    } else { // One ID
+      ResourceObject resourceObject = appConnector.getObject("account", ids.trim(), null); // Trim to remove any extra spaces
+      TaskResult tr = agg.aggregate(appObject, resourceObject);
+
+      if (null == tr) {
+        Message emsg = new Message(Message.Type.Warn, "ERROR: Null taskResult returned from aggregate() call for ID: " + ids, new Object[] {});
+        taskResult.addMessage(emsg);
+        return emsg;
+      }
+    }
+  } catch (Exception e) {
+    Message emsg = new Message(Message.Type.Warn, e.getMessage(), new Object[] {});
+    taskResult.addMessage(emsg);
+    return "Error";
+  } finally { 
+    taskResult.getDefinition().setArgument("emailids","");
+    taskResult.getDefinition().setArgument("correlate",false);
+    taskResult.getDefinition().setArgument("ids","");
+    taskResult.getDefinition().setArgument("delimiter","");
+    context.saveObject(taskResult.getDefinition());
+    context.commitTransaction();
+  } 
+
+  taskResult.addMessage("Complete...");
+  return "Finished";
+  </Source>
+</Rule>
