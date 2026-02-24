@@ -1,0 +1,32 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE TaskDefinition PUBLIC "sailpoint.dtd" "sailpoint.dtd">
+<TaskDefinition created="1736539226931" id="a8a231a8944e188d819451cdc3333e55" modified="1767639873816" name="Ops Util Scheduled Tasks List Task" resultAction="Delete" significantModified="1767639873816" subType="task_item_type_generic" type="Generic">
+  <Attributes>
+    <Map>
+      <entry key="TaskSchedule.host"/>
+      <entry key="emailids"/>
+      <entry key="ist" value="true"/>
+      <entry key="ruleName" value="Ops Util Scheduled Tasks List Rule"/>
+      <entry key="taskCompletionEmailNotify" value="Disabled"/>
+      <entry key="taskCompletionEmailRecipients"/>
+      <entry key="taskCompletionEmailTemplate"/>
+    </Map>
+  </Attributes>
+  <Description>A task that emails all the Scheduled Tasks</Description>
+  <Owner>
+    <Reference class="sailpoint.object.Identity" id="a8a231a891d61cef8191e144219f4773" name=""/>
+  </Owner>
+  <Parent>
+    <Reference class="sailpoint.object.TaskDefinition" id="0aecfebb7a7116df817a71f7447901c4" name="Run Rule"/>
+  </Parent>
+  <Signature>
+    <Inputs>
+      <Argument helpKey="Email ids to send the report" name="emailids" required="true" type="string">
+        <Prompt>Email ids to send the report. (comma seperated)</Prompt>
+      </Argument>
+      <Argument helpKey="Default is MST" name="ist" type="boolean">
+        <Prompt>Convert to IST time zone</Prompt>
+      </Argument>
+    </Inputs>
+  </Signature>
+</TaskDefinition>
