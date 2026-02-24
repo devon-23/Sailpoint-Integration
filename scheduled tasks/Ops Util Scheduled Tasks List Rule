@@ -1,0 +1,212 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE Rule PUBLIC "sailpoint.dtd" "sailpoint.dtd">
+<Rule created="1736455787235" id="a8a231a89446183f81944cd492e331a6" language="beanshell" modified="1737473774522" name="Ops Util Scheduled Tasks List Rule">
+  <Description>
+    This rule is for testing from debug pages
+  </Description>
+  <Source>
+
+  import java.util.*;
+  import java.text.*;
+
+  import java.util.Date;
+  import java.time.LocalDateTime;
+  import java.time.ZoneId;
+  import java.time.format.DateTimeFormatter;
+  import java.time.ZonedDateTime;
+
+  import java.io.*;
+  import sailpoint.api.*;
+  import sailpoint.object.*;
+  import java.nio.file.Files;
+  import java.nio.file.Path;
+  import java.nio.file.Paths;
+  import sailpoint.tools.Message.Type;
+  import sailpoint.tools.Message;
+  import sailpoint.tools.Util;
+
+  import sailpoint.object.TaskResult;
+  import sailpoint.object.TaskDefinition;
+  import sailpoint.object.TaskSchedule;
+
+  import sailpoint.object.TaskResult.CompletionStatus;
+
+  import sailpoint.object.QueryOptions;
+  import sailpoint.object.Filter;
+
+  QueryOptions qo = new QueryOptions();
+  qo.addFilter(Filter.notnull("nextExecution"));
+
+  List taskScheduleList = context.getObjects(TaskSchedule.class, qo);
+  list = new ArrayList();
+
+  ist = taskResult.getDefinition().getBoolean("ist");
+
+  for(TaskSchedule taskSchedule : taskScheduleList) {
+    String taskScheduleName = taskSchedule.getName();
+    defName = taskSchedule.getDefinitionName();
+    owner = taskSchedule.getOwner();
+
+    String definitionName = taskSchedule.getDefinitionName();
+    Date lastExecutionTime = taskSchedule.getLastExecution();
+    nextExecutionTime = taskSchedule.getNextExecution();
+
+    if (lastExecutionTime != null @and defintionName != null) {
+      String lastExecDate="";
+
+      if(lastExecutionTime!=null) {
+        SimpleDateFormat formatter = new SimpleDateFormat("MM/dd/yy hh:mm a");
+        lastExecDate = formatter.format(lastExecutionTime);
+      }
+
+      if(nextExecutionTime != null) {
+        SimpleDateFormat formatter = new SimpleDateFormat("MM/dd/yy hh:mm a");
+        nextExecute = formatter.format(nextExecutionTime);
+      }
+
+      TaskResult taskResultObj = taskSchedule.getLatestResult();
+
+      String lastRunStatus = "";
+
+      int lastRunTime = 0;
+      String lastRunTimeStr = "";
+
+      if(taskResultObj != null) {
+        lastRunTime = taskResultObj.getRunLength();
+        owner = taskResultObj.getOwner().getDisplayableName();
+        lastRunStatus = taskResultObj.getCompletionStatus().toString();
+
+        res = new ArrayList();
+        res.add(taskScheduleName);
+        res.add(defName);
+
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MM/dd/yy hh:mm a");
+        ZoneId mstZone = ZoneId.of("America/Denver");
+        ZoneId istZone = ZoneId.of("Asia/Kolkata");
+
+        if (ist) {
+          LocalDateTime nextExecuteLDT = LocalDateTime.parse(nextExecute, formatter);
+          ZonedDateTime nextExecuteZDT = nextExecuteLDT.atZone(mstZone).withZoneSameInstant(istZone);
+          nextExecute = nextExecuteZDT.format(formatter);
+
+          LocalDateTime lastExecDateLDT = LocalDateTime.parse(lastExecDate, formatter);
+          ZonedDateTime lastExecDateZDT = lastExecDateLDT.atZone(mstZone).withZoneSameInstant(istZone);
+          lastExecDate = lastExecDateZDT.format(formatter);
+        }
+        res.add(nextExecute);
+        res.add(lastExecDate);
+        res.add(lastRunStatus);
+        res.add(owner.toString());
+
+        list.add(res);
+      }
+    }
+  }
+
+  dateFormat = new SimpleDateFormat("MM/dd/yy hh:mm a");
+
+  // Sort the list by the third entry (date)
+  Collections.sort(list, new Comparator() {
+    public int compare(a, b) {
+      try {
+        return dateFormat.parse(a.get(2)).compareTo(dateFormat.parse(b.get(2)));
+      } catch (ParseException e) {
+        throw new IllegalArgumentException(e);
+      }
+    }
+  });
+
+  private void buildReport(BufferedWriter fileWriter, List list ) {	
+    try {
+      for (result : list) {   
+        String line = "";
+        for (int i = 0; i &lt;= 5; i++) {
+          line = line.concat(result.get(i));
+          if (i != columnCount) {
+            line = line.concat(",");
+          }
+        }
+        // taskResult.addMessage("writing line " + line);     
+        fileWriter.newLine();
+        fileWriter.write(line);  
+      }
+
+      fileWriter.close();
+    } catch(Exception exp) {
+      log.error("Error Processing Scheduled Tasks Rule" + exp.getMessage());
+      StringWriter sw = new StringWriter();
+      exp.printStackTrace(new PrintWriter(sw));
+      String exceptionAsString = sw.toString();
+      Message msg = new Message(Message.Type.Warn, "  Error: " + exp.getMessage() + exceptionAsString, new Object[] {});
+      taskResult.addMessage(msg);   
+    }      
+  }  
+
+  //program starts here 
+  // String sharePath = "\\\\PDC1WRISSSPAP09\\reports\\";
+  //  String sharePath = "\\\\PDC1WRISSSPAP09\\arcfiles\\reports\\";     //PROD
+  String sharePath = "\\\\PDC9WRISSSPAP08\\arcfiles\\tmp\\";   //UAT
+
+  String tmpDir = ObjectUtil.getTempDir(context);
+  String fileSuffix = new SimpleDateFormat("yyyy_MM_dd_HH_mm_ss").format(new Date()) + ".csv";
+  String csvFilePath = tmpDir+"\\AccessReviewItems_" + fileSuffix;
+  BufferedWriter fileWriter = new BufferedWriter(new FileWriter(csvFilePath));
+  String header = "Name,Task,Next Execution,Last Execution,Result,Owner";
+  fileWriter.write(header);
+
+  String emailids;
+
+  try {
+    if(null != taskResult.getDefinition().getString("emailids")) { // emails to send it to
+      emailids = taskResult.getDefinition().getString("emailids");
+      taskResult.addMessage("emailids ==  " + emailids);
+    }
+
+    buildReport(fileWriter, list);				
+
+    fileWriter.close();
+
+    //Send Report in EMail
+    String filePath = csvFilePath;
+    File file = new File(filePath);
+    long fileBytes = file.length();
+    boolean isBig = fileBytes > 7340032;  //gt 7 MB;
+    String[] emailidsArray = emailids.split(",");
+    for(String em:emailidsArray) {
+      if(em != null){
+        byte[] bytes = Files.readAllBytes(Paths.get(filePath));        
+        EmailTemplate template = context.getObjectByName(EmailTemplate.class, "Scheduled Tasks Export");
+        EmailFileAttachment attachment = new EmailFileAttachment( "ScheduledTasks_" + fileSuffix, EmailFileAttachment.MimeType.MIME_CSV, bytes);
+        EmailOptions options = new EmailOptions();
+        options.addAttachment( attachment );
+        options.setTo(em.trim());		  
+        options.setSendImmediate(true);
+        options.setNoRetry(true);
+        options.setVariable("user", "placeholder");
+        context.sendEmailNotification(template, options);
+      }
+    }
+
+    //Delete File after Email
+    File file=new File(csvFilePath);
+    file.delete();
+  } catch(Exception exp) {
+    StringWriter sw = new StringWriter();
+    exp.printStackTrace(new PrintWriter(sw));
+    String exceptionAsString = sw.toString();
+    Message msg = new Message(Message.Type.Warn, "  Error: " + exp.getMessage() + exceptionAsString, new Object[] {});
+    taskResult.addMessage(msg);  
+    log.error("Exception which generating Scheduled Tasks Export." + exp.getMessage());
+  }
+
+  finally { 
+    taskResult.getDefinition().setArgument("emailids","");
+    context.saveObject(taskResult.getDefinition());
+    context.commitTransaction();
+  } 
+
+  taskResult.addMessage("Complete...");
+  return list;
+
+  </Source>
+</Rule>
