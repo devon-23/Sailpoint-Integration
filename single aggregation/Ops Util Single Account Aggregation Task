@@ -1,0 +1,49 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE TaskDefinition PUBLIC "sailpoint.dtd" "sailpoint.dtd">
+<TaskDefinition created="1736450363198" id="a8a231a89446183f81944c81cf3e2fc7" modified="1766497870051" name="Ops Util Single Account Aggregation Task" resultAction="Delete" significantModified="1766497870051" subType="task_item_type_generic" type="Generic">
+  <Attributes>
+    <Map>
+      <entry key="TaskDefinition.runLengthAverage" value="9"/>
+      <entry key="TaskDefinition.runLengthTotal" value="90"/>
+      <entry key="TaskDefinition.runs" value="10"/>
+      <entry key="TaskSchedule.host"/>
+      <entry key="application" value="Azure AD"/>
+      <entry key="correlate">
+        <value>
+          <Boolean></Boolean>
+        </value>
+      </entry>
+      <entry key="corrlate" value="true"/>
+      <entry key="delimiter"/>
+      <entry key="emailids"/>
+      <entry key="ids"/>
+      <entry key="ruleName" value="Ops Util Single Account Aggregation Rule"/>
+      <entry key="taskCompletionEmailNotify" value="Disabled"/>
+      <entry key="taskCompletionEmailRecipients"/>
+      <entry key="taskCompletionEmailTemplate"/>
+    </Map>
+  </Attributes>
+  <Description>A task that can be used to run an arbitrary rule.</Description>
+  <Owner>
+    <Reference class="sailpoint.object.Identity" id="a8a231a891d61cef8191e144219f4773" name=""/>
+  </Owner>
+  <Parent>
+    <Reference class="sailpoint.object.TaskDefinition" id="0aecfebb7a7116df817a71f7447901c4" name="Run Rule"/>
+  </Parent>
+  <Signature>
+    <Inputs>
+      <Argument helpKey="Application Name" name="application" required="true" type="Application">
+        <Prompt>Application Name</Prompt>
+      </Argument>
+      <Argument helpKey="Account ID" name="ids" required="true" type="string">
+        <Prompt>Account ID(s)</Prompt>
+      </Argument>
+      <Argument helpKey="ID Delimiter" name="delimiter" type="string">
+        <Prompt>Delimiter between Account IDs</Prompt>
+      </Argument>
+      <Argument helpKey="Correlate" name="corrlate" required="true" type="boolean">
+        <Prompt>Only create links if they can be correlated to an existing identity.</Prompt>
+      </Argument>
+    </Inputs>
+  </Signature>
+</TaskDefinition>
