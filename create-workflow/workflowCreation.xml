@@ -161,11 +161,11 @@ try {
 }
 </Source>
 </Script>
-<Transition to="Audit" when="isSuccess == true"/>
+<Transition to="LogAudit" when="isSuccess == true"/>
 <Transition to="HandleError"/>
 </Step>
 
-<Step name="Audit">
+<Step name="LogAudit">
 <Script>
 <Source>
 import sailpoint.object.*;
@@ -175,21 +175,25 @@ try {
   Date endTime = new Date();
   long duration = endTime.getTime() - workflowStartTime.getTime();
   
+  log.info("Logging audit event");
+  
   AuditEvent event = new AuditEvent();
   event.setAction("CreateADGroup");
   event.setSource("Workflow");
   event.setInterface("API");
-  event.setStatus("SUCCESS");
-  event.setComment("Group: " + groupName + " created in " + duration + "ms");
+  event.setComment("Group " + groupName + " created successfully in " + duration + "ms");
   
   Map attrs = new HashMap();
   attrs.put("requestId", requestId);
   attrs.put("groupName", groupName);
+  attrs.put("owner", groupOwner);
+  attrs.put("duration", String.valueOf(duration));
   event.setAttributes(attrs);
   
   context.saveObject(event);
   context.commitTransaction();
-  log.info("Audit logged");
+  
+  log.info("Audit logged successfully");
 } catch (Exception e) {
   log.error("Audit error: " + e.getMessage());
 }
@@ -207,22 +211,29 @@ import java.util.*;
 log.error("Workflow error: " + errorMessage);
 
 try {
+  Date endTime = new Date();
+  long duration = endTime.getTime() - workflowStartTime.getTime();
+  
+  log.info("Logging error audit event");
+  
   AuditEvent event = new AuditEvent();
   event.setAction("CreateADGroup");
   event.setSource("Workflow");
   event.setInterface("API");
-  event.setStatus("FAILED");
-  event.setComment("Error: " + errorMessage);
+  event.setComment("Error creating group " + groupName + ": " + errorMessage);
   
   Map attrs = new HashMap();
   attrs.put("requestId", requestId);
   attrs.put("error", errorMessage);
+  attrs.put("duration", String.valueOf(duration));
   event.setAttributes(attrs);
   
   context.saveObject(event);
   context.commitTransaction();
+  
+  log.info("Error audit logged");
 } catch (Exception e) {
-  log.error("Error logging: " + e.getMessage());
+  log.error("Error logging failure: " + e.getMessage());
 }
 </Source>
 </Script>
