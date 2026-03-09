@@ -3,7 +3,7 @@
 <Rule name="Test Create AD Group Workflow" type="GenericObject">
   <Description>
     Test rule for Create AD Group workflow - IIQ 8.4
-    Uses WorkflowLaunch and Workflower pattern
+    Uses WorkflowLaunch and Workflower pattern with correct methods
   </Description>
   <Signature returnType="void"/>
   <Body>
@@ -23,7 +23,7 @@ try {
     return;
   }
   
-  log.info("✓ Workflow found: " + wf.getName());
+  log.info("Workflow found: " + wf.getName());
   
   // Create test parameters
   HashMap launchArgsMap = new HashMap();
@@ -38,22 +38,15 @@ try {
   launchArgsMap.put("organizationalUnit", "CN=Users,DC=company,DC=com");
   launchArgsMap.put("groupEmail", "testgroup@company.com");
   
-  // Optional: Add additional attributes
-  HashMap additionalAttrs = new HashMap();
-  additionalAttrs.put("info", "Created from test rule");
-  additionalAttrs.put("notes", "Workflow test");
-  launchArgsMap.put("additionalAttributes", additionalAttrs);
-  
-  log.info("\nTest Parameters:");
+  log.info("Test Parameters:");
   log.info("  Group Name: " + testGroupName);
-  log.info("  Group Owner: CN=Administrator,CN=Users,DC=company,DC=com");
-  log.info("  OU: CN=Users,DC=company,DC=com");
+  log.info("  Owner: CN=Administrator,CN=Users,DC=company,DC=com");
   
   // Create WorkflowLaunch object
   WorkflowLaunch wflaunch = new WorkflowLaunch();
   wflaunch.setWorkflowName(wf.getName());
   wflaunch.setWorkflowRef(wf.getName());
-  wflaunch.setCaseName("Test AD Group: " + testGroupName);
+  wflaunch.setCaseName("Test: " + testGroupName);
   wflaunch.setVariables(launchArgsMap);
   
   // Launch the workflow using Workflower
@@ -66,97 +59,107 @@ try {
     return;
   }
   
-  log.info("✓ Workflow launched!");
+  log.info("Workflow launched!");
   
-  // Get the case ID from the launch
-  String caseId = launch.getCaseId();
-  log.info("  Case ID: " + caseId);
+  // Get case ID - try multiple methods
+  String caseId = null;
   
-  // Wait for workflow to complete (max 2 minutes)
-  log.info("\nWaiting for workflow completion...");
-  WorkflowCase wfCase = null;
-  int maxWait = 120; // seconds
-  
-  for (int i = 0; i < maxWait; i++) {
-    // Try to get the case
+  // Method 1: Try getId()
+  try {
+    caseId = launch.getId();
     if (caseId != null &amp;&amp; !caseId.isEmpty()) {
-      wfCase = (WorkflowCase) context.getObjectById(WorkflowCase.class, caseId);
+      log.info("Case ID (from getId): " + caseId);
     }
-    
-    // Check if we have a case and if it's finalized
-    if (wfCase != null &amp;&amp; wfCase.isFinalized()) {
-      log.info("✓ Workflow completed after " + i + " seconds");
-      break;
-    }
-    
-    // Show status
-    if (wfCase != null) {
-      log.info("  Status: " + wfCase.getState() + " (" + (i + 1) + "s)");
-    }
-    
-    // Wait before checking again
-    Thread.sleep(1000);
+  } catch (Exception e) {
+    log.debug("getId() not available: " + e.getMessage());
   }
   
-  // Get and display results
-  if (wfCase == null) {
-    log.warn("WARNING: Could not retrieve workflow case!");
-  } else {
-    log.info("\n===== WORKFLOW RESULTS =====");
-    log.info("Case ID: " + wfCase.getId());
-    log.info("State: " + wfCase.getState());
+  // Method 2: Try getWorkflowCase()
+  WorkflowCase wfCase = null;
+  try {
+    wfCase = launch.getWorkflowCase();
+    if (wfCase != null) {
+      caseId = wfCase.getId();
+      log.info("Case ID (from getWorkflowCase): " + caseId);
+    }
+  } catch (Exception e) {
+    log.debug("getWorkflowCase() not available: " + e.getMessage());
+  }
+  
+  // Method 3: Search for workflow cases with our case name
+  if (caseId == null) {
+    log.info("Searching for workflow case...");
+    String caseName = "Test: " + testGroupName;
     
-    // Get output variables
-    Map variables = wfCase.getVariables();
+    Iterator cases = context.search(WorkflowCase.class, new QueryOptions());
+    while (cases.hasNext()) {
+      WorkflowCase candidate = (WorkflowCase) cases.next();
+      if (candidate.getCaseName() != null &amp;&amp; candidate.getCaseName().equals(caseName)) {
+        wfCase = candidate;
+        caseId = candidate.getId();
+        log.info("Case ID (from search): " + caseId);
+        break;
+      }
+    }
+  }
+  
+  // If we found a case, wait for it to complete
+  if (wfCase != null || caseId != null) {
+    log.info("Waiting for workflow completion...");
     
-    if (variables != null &amp;&amp; !variables.isEmpty()) {
-      Object requestId = variables.get("requestId");
-      Object isSuccess = variables.get("isSuccess");
-      Object errorMessage = variables.get("errorMessage");
-      Object auditLog = variables.get("auditLog");
+    int maxWait = 120; // seconds
+    for (int i = 0; i < maxWait; i++) {
+      if (wfCase == null &amp;&amp; caseId != null) {
+        wfCase = (WorkflowCase) context.getObjectById(WorkflowCase.class, caseId);
+      }
       
-      log.info("\nOutput Variables:");
-      log.info("  requestId: " + (requestId != null ? requestId : "null"));
-      log.info("  isSuccess: " + (isSuccess != null ? isSuccess.toString() : "null"));
-      log.info("  errorMessage: " + (errorMessage != null ? errorMessage : "null"));
+      if (wfCase != null &amp;&amp; wfCase.isFinalized()) {
+        log.info("Workflow completed!");
+        break;
+      }
       
-      // Print success or failure
-      if (isSuccess != null) {
-        String successStr = isSuccess.toString();
+      if (wfCase != null) {
+        log.info("  Status: " + wfCase.getState() + " (" + (i + 1) + "s)");
+      }
+      
+      Thread.sleep(1000);
+    }
+    
+    // Display results
+    if (wfCase != null) {
+      log.info("\n===== RESULTS =====");
+      log.info("Case ID: " + wfCase.getId());
+      log.info("State: " + wfCase.getState());
+      
+      Map variables = wfCase.getVariables();
+      if (variables != null) {
+        Object isSuccess = variables.get("isSuccess");
+        Object errorMessage = variables.get("errorMessage");
+        Object requestId = variables.get("requestId");
         
-        if ("true".equals(successStr)) {
-          log.info("\n========== ✓ SUCCESS ==========");
-          log.info("Group created successfully!");
-          log.info("Group Name: " + testGroupName);
-          log.info("Request ID: " + requestId);
-          if (auditLog != null) {
-            log.info("Audit Log: " + auditLog);
-          }
-          log.info("==============================");
-        } else if ("false".equals(successStr)) {
-          log.error("\n========== ✗ FAILED ==========");
-          log.error("Workflow execution failed!");
-          log.error("Error: " + errorMessage);
-          log.error("Request ID: " + requestId);
-          log.error("==============================");
+        log.info("\nOutput:");
+        log.info("  isSuccess: " + (isSuccess != null ? isSuccess : "null"));
+        log.info("  errorMessage: " + (errorMessage != null ? errorMessage : "null"));
+        log.info("  requestId: " + (requestId != null ? requestId : "null"));
+        
+        if (isSuccess != null &amp;&amp; "true".equals(isSuccess.toString())) {
+          log.info("\n✓ SUCCESS - Group created!");
+          log.info("  Group: " + testGroupName);
+          log.info("  RequestID: " + requestId);
+        } else {
+          log.error("\n✗ FAILED - " + errorMessage);
         }
       }
-    } else {
-      log.warn("No output variables returned from workflow");
     }
+  } else {
+    log.warn("WARNING: Could not find workflow case");
   }
   
   log.info("\n===== TEST COMPLETE =====");
   
 } catch (Exception ex) {
-  log.error("EXCEPTION: " + ex.getClass().getName());
-  log.error("Message: " + ex.getMessage());
-  
-  // Print stack trace
-  StackTraceElement[] trace = ex.getStackTrace();
-  for (StackTraceElement element : trace) {
-    log.error("  at " + element.toString());
-  }
+  log.error("EXCEPTION: " + ex.getMessage());
+  ex.printStackTrace();
 }
     ]]>
   </Body>
