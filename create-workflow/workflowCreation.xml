@@ -17,9 +17,37 @@
 <Variable name="workflowStartTime" type="date"/>
 <Variable name="errorMessage" type="string"/>
 <Variable name="isSuccess" type="boolean"/>
-<Variable name="auditLog" type="string"/>
 
 <Step name="Start">
+<Transition to="Initialize"/>
+</Step>
+
+<Step name="Initialize">
+<Script>
+<Source>
+import sailpoint.object.*;
+import sailpoint.tools.*;
+import java.util.*;
+
+try {
+  log.info("===== Workflow Start =====");
+  
+  workflowStartTime = new Date();
+  requestId = UUID.randomUUID().toString();
+  isSuccess = false;
+  errorMessage = null;
+  
+  log.info("RequestID: " + requestId);
+  log.info("ApplicationName: " + applicationName);
+  log.info("GroupName: " + groupName);
+  
+} catch (Exception e) {
+  log.error("Init error: " + e.getMessage());
+  errorMessage = "Initialization error: " + e.getMessage();
+  isSuccess = false;
+}
+</Source>
+</Script>
 <Transition to="ValidateInput"/>
 </Step>
 
@@ -27,63 +55,83 @@
 <Script>
 <Source>
 import sailpoint.object.*;
-import sailpoint.tools.*;
 import java.util.*;
 
-workflowStartTime = new Date();
-requestId = UUID.randomUUID().toString();
-log.info("Request ID: " + requestId);
-
-List errors = new ArrayList();
-if (null == applicationName || applicationName.trim().isEmpty()) {
-  errors.add("applicationName required");
-}
-if (null == groupName || groupName.trim().isEmpty()) {
-  errors.add("groupName required");
-}
-if (null == groupDescription || groupDescription.trim().isEmpty()) {
-  errors.add("groupDescription required");
-}
-if (null == groupOwner || groupOwner.trim().isEmpty()) {
-  errors.add("groupOwner required");
-}
-if (null == groupType || groupType.trim().isEmpty()) {
-  errors.add("groupType required");
-}
-if (null == groupScope || groupScope.trim().isEmpty()) {
-  errors.add("groupScope required");
-}
-if (null == organizationalUnit || organizationalUnit.trim().isEmpty()) {
-  errors.add("organizationalUnit required");
-}
-
-if (errors.size() > 0) {
-  errorMessage = "Validation Failed: " + errors.toString();
+try {
+  log.info("Validating input parameters");
+  
+  List errors = new ArrayList();
+  
+  if (applicationName == null || applicationName.trim().length() == 0) {
+    errors.add("applicationName");
+  }
+  if (groupName == null || groupName.trim().length() == 0) {
+    errors.add("groupName");
+  }
+  if (groupDescription == null || groupDescription.trim().length() == 0) {
+    errors.add("groupDescription");
+  }
+  if (groupOwner == null || groupOwner.trim().length() == 0) {
+    errors.add("groupOwner");
+  }
+  if (groupType == null || groupType.trim().length() == 0) {
+    errors.add("groupType");
+  }
+  if (groupScope == null || groupScope.trim().length() == 0) {
+    errors.add("groupScope");
+  }
+  if (organizationalUnit == null || organizationalUnit.trim().length() == 0) {
+    errors.add("organizationalUnit");
+  }
+  
+  if (errors.size() > 0) {
+    errorMessage = "Missing required parameters: " + errors.toString();
+    isSuccess = false;
+    log.error(errorMessage);
+  } else {
+    log.info("Validation passed");
+    isSuccess = true;
+  }
+  
+} catch (Exception e) {
+  log.error("Validation error: " + e.getMessage());
+  errorMessage = "Validation error: " + e.getMessage();
   isSuccess = false;
-} else {
-  isSuccess = true;
 }
 </Source>
 </Script>
 <Transition to="GetADApplication" when="isSuccess == true"/>
-<Transition to="HandleError"/>
+<Transition to="LogError"/>
 </Step>
 
 <Step name="GetADApplication">
 <Script>
 <Source>
-log.info("Getting AD application: " + applicationName);
-adApplication = context.getObjectByName(sailpoint.object.Application.class, applicationName);
-if (null == adApplication) {
-  errorMessage = "Application not found: " + applicationName;
+import sailpoint.object.*;
+
+try {
+  log.info("Getting AD application: " + applicationName);
+  
+  adApplication = context.getObjectByName(sailpoint.object.Application.class, applicationName);
+  
+  if (adApplication == null) {
+    errorMessage = "Application not found: " + applicationName;
+    isSuccess = false;
+    log.error(errorMessage);
+  } else {
+    log.info("Application found");
+    isSuccess = true;
+  }
+  
+} catch (Exception e) {
+  log.error("GetADApplication error: " + e.getMessage());
+  errorMessage = "Error getting application: " + e.getMessage();
   isSuccess = false;
-} else {
-  isSuccess = true;
 }
 </Source>
 </Script>
 <Transition to="BuildPlan" when="isSuccess == true"/>
-<Transition to="HandleError"/>
+<Transition to="LogError"/>
 </Step>
 
 <Step name="BuildPlan">
@@ -92,8 +140,9 @@ if (null == adApplication) {
 import sailpoint.object.*;
 import java.util.*;
 
-log.info("Building provisioning plan");
 try {
+  log.info("Building provisioning plan");
+  
   ProvisioningPlan plan = new ProvisioningPlan();
   ProvisioningPlan.AccountRequest acctReq = new ProvisioningPlan.AccountRequest(
     ProvisioningPlan.AccountRequest.Type.Create, applicationName, null, null);
@@ -108,29 +157,39 @@ try {
   attributes.put("ou", organizationalUnit);
   attributes.put("managedBy", groupOwner);
 
-  if (null != groupEmail &amp;&amp; !groupEmail.trim().isEmpty()) {
+  if (groupEmail != null &amp;&amp; groupEmail.trim().length() > 0) {
     attributes.put("mail", groupEmail);
+    log.info("Added email: " + groupEmail);
   }
-  if (null != additionalAttributes &amp;&amp; additionalAttributes.size() > 0) {
+  
+  if (additionalAttributes != null &amp;&amp; additionalAttributes.size() > 0) {
     attributes.putAll(additionalAttributes);
+    log.info("Added " + additionalAttributes.size() + " custom attributes");
   }
 
   for (String attrName : attributes.keySet()) {
-    acctReq.add(new ProvisioningPlan.AttributeRequest(attrName, 
-      ProvisioningPlan.Operation.Set, attributes.get(attrName)));
+    Object val = attributes.get(attrName);
+    if (val != null) {
+      acctReq.add(new ProvisioningPlan.AttributeRequest(attrName, 
+        ProvisioningPlan.Operation.Set, val));
+    }
   }
 
   plan.add(acctReq);
   workflow.put("provisioningPlan", plan);
+  
+  log.info("Plan built with " + attributes.size() + " attributes");
   isSuccess = true;
+  
 } catch (Exception e) {
+  log.error("BuildPlan error: " + e.getMessage());
   errorMessage = "Error building plan: " + e.getMessage();
   isSuccess = false;
 }
 </Source>
 </Script>
 <Transition to="ExecutePlan" when="isSuccess == true"/>
-<Transition to="HandleError"/>
+<Transition to="LogError"/>
 </Step>
 
 <Step name="ExecutePlan">
@@ -138,110 +197,127 @@ try {
 <Source>
 import sailpoint.object.*;
 
-log.info("Executing provisioning plan");
 try {
+  log.info("Executing provisioning plan");
+  
   ProvisioningPlan plan = (ProvisioningPlan) workflow.get("provisioningPlan");
-  if (null == plan) {
-    errorMessage = "Plan not found";
+  
+  if (plan == null) {
+    errorMessage = "Provisioning plan not found";
     isSuccess = false;
-  } else {
-    sailpoint.connector.Connector connector = adApplication.getConnector();
-    if (null == connector) {
-      errorMessage = "Connector not found";
-      isSuccess = false;
-    } else {
-      connector.provision(context, adApplication, plan);
-      log.info("Group created successfully");
-      isSuccess = true;
-    }
+    log.error(errorMessage);
+    return;
   }
+  
+  if (adApplication == null) {
+    errorMessage = "AD Application is null";
+    isSuccess = false;
+    log.error(errorMessage);
+    return;
+  }
+  
+  sailpoint.connector.Connector connector = adApplication.getConnector();
+  
+  if (connector == null) {
+    errorMessage = "Connector not found for application";
+    isSuccess = false;
+    log.error(errorMessage);
+    return;
+  }
+  
+  connector.provision(context, adApplication, plan);
+  log.info("Provisioning executed successfully");
+  isSuccess = true;
+  
 } catch (Exception e) {
-  errorMessage = "Error: " + e.getMessage();
+  log.error("ExecutePlan error: " + e.getMessage());
+  errorMessage = "Error executing plan: " + e.getMessage();
   isSuccess = false;
 }
 </Source>
 </Script>
-<Transition to="LogAudit" when="isSuccess == true"/>
-<Transition to="HandleError"/>
+<Transition to="LogSuccess" when="isSuccess == true"/>
+<Transition to="LogError"/>
 </Step>
 
-<Step name="LogAudit">
+<Step name="LogSuccess">
 <Script>
 <Source>
 import sailpoint.object.*;
 import java.util.*;
 
 try {
+  log.info("Logging success");
+  
   Date endTime = new Date();
   long duration = endTime.getTime() - workflowStartTime.getTime();
-  
-  log.info("Logging audit event");
   
   AuditEvent event = new AuditEvent();
   event.setAction("CreateADGroup");
   event.setSource("Workflow");
   event.setInterface("API");
-  event.setComment("Group " + groupName + " created successfully in " + duration + "ms");
+  event.setComment("SUCCESS: Group " + groupName + " created in " + duration + "ms");
   
   Map attrs = new HashMap();
-  attrs.put("requestId", requestId);
-  attrs.put("groupName", groupName);
-  attrs.put("owner", groupOwner);
+  if (requestId != null) attrs.put("requestId", requestId);
+  if (groupName != null) attrs.put("groupName", groupName);
+  if (groupOwner != null) attrs.put("owner", groupOwner);
   attrs.put("duration", String.valueOf(duration));
   event.setAttributes(attrs);
   
   context.saveObject(event);
   context.commitTransaction();
   
-  log.info("Audit logged successfully");
+  log.info("Success logged");
+  
 } catch (Exception e) {
-  log.error("Audit error: " + e.getMessage());
+  log.error("Logging error: " + e.getMessage());
 }
 </Source>
 </Script>
-<Transition to="Success"/>
+<Transition to="End"/>
 </Step>
 
-<Step name="HandleError">
+<Step name="LogError">
 <Script>
 <Source>
 import sailpoint.object.*;
 import java.util.*;
 
-log.error("Workflow error: " + errorMessage);
-
 try {
+  log.info("Logging error");
+  
   Date endTime = new Date();
   long duration = endTime.getTime() - workflowStartTime.getTime();
-  
-  log.info("Logging error audit event");
   
   AuditEvent event = new AuditEvent();
   event.setAction("CreateADGroup");
   event.setSource("Workflow");
   event.setInterface("API");
-  event.setComment("Error creating group " + groupName + ": " + errorMessage);
+  
+  String errorMsg = (errorMessage != null) ? errorMessage : "Unknown error";
+  event.setComment("FAILED: " + errorMsg);
   
   Map attrs = new HashMap();
-  attrs.put("requestId", requestId);
-  attrs.put("error", errorMessage);
+  if (requestId != null) attrs.put("requestId", requestId);
+  if (groupName != null) attrs.put("groupName", groupName);
+  attrs.put("error", errorMsg);
   attrs.put("duration", String.valueOf(duration));
   event.setAttributes(attrs);
   
   context.saveObject(event);
   context.commitTransaction();
   
-  log.info("Error audit logged");
+  log.info("Error logged");
+  
 } catch (Exception e) {
-  log.error("Error logging failure: " + e.getMessage());
+  log.error("Error logging: " + e.getMessage());
 }
 </Source>
 </Script>
-<Transition to="Failure"/>
+<Transition to="End"/>
 </Step>
 
-<Step name="Success"/>
-
-<Step name="Failure"/>
+<Step name="End"/>
 
 </Workflow>
