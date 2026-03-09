@@ -3,7 +3,7 @@
 
 <Workflow name="CreateADGroupWorkflow" type="Generic">
 
-    <!-- ================= VARIABLES ================= -->
+    <!-- VARIABLES -->
 
     <Variable name="applicationName" input="true" required="true"/>
     <Variable name="groupName" input="true" required="true"/>
@@ -12,28 +12,28 @@
     <Variable name="requester" input="true"/>
     <Variable name="result" output="true"/>
 
-    <!-- ================= START ================= -->
+    <!-- START STEP -->
 
     <Step name="Start" icon="Start">
         <Transition to="Validate Inputs"/>
     </Step>
 
-    <!-- ================= VALIDATE INPUTS ================= -->
+    <!-- VALIDATE INPUTS -->
 
     <Step name="Validate Inputs">
 
         <Script>
             <Source>
 
-                import sailpoint.tools.GeneralException;
+import sailpoint.tools.GeneralException;
 
-                if (groupName == null || groupName.trim().length() == 0) {
-                    throw new GeneralException("Group name is required");
-                }
+if (groupName == null || groupName.trim().length() == 0) {
+    throw new GeneralException("Group name is required");
+}
 
-                if (applicationName == null || applicationName.trim().length() == 0) {
-                    throw new GeneralException("Application name is required");
-                }
+if (applicationName == null || applicationName.trim().length() == 0) {
+    throw new GeneralException("Application name is required");
+}
 
             </Source>
         </Script>
@@ -42,48 +42,48 @@
 
     </Step>
 
-    <!-- ================= CREATE ENTITLEMENT ================= -->
+    <!-- CREATE ENTITLEMENT -->
 
     <Step name="Create Entitlement">
 
         <Script>
             <Source>
 
-                import sailpoint.object.Application;
-                import sailpoint.object.ManagedAttribute;
-                import sailpoint.object.Identity;
-                import sailpoint.tools.GeneralException;
+import sailpoint.object.Application;
+import sailpoint.object.ManagedAttribute;
+import sailpoint.object.Identity;
+import sailpoint.tools.GeneralException;
 
-                Application app = context.getObjectByName(Application.class, applicationName);
+Application app = context.getObjectByName(Application.class, applicationName);
 
-                if (app == null) {
-                    throw new GeneralException("Application not found: " + applicationName);
-                }
+if (app == null) {
+    throw new GeneralException("Application not found: " + applicationName);
+}
 
-                ManagedAttribute group = new ManagedAttribute();
+ManagedAttribute group = new ManagedAttribute();
 
-                group.setApplication(app);
-                group.setValue(groupName);
-                group.setDisplayName(groupName);
+group.setApplication(app);
+group.setValue(groupName);
+group.setDisplayName(groupName);
 
-                if (description != null) {
-                    group.setAttribute("description", description);
-                }
+if (description != null) {
+    group.setAttribute("description", description);
+}
 
-                if (owner != null) {
+if (owner != null) {
 
-                    Identity ownerIdentity =
-                        context.getObjectByName(Identity.class, owner);
+    Identity ownerIdentity =
+        context.getObjectByName(Identity.class, owner);
 
-                    if (ownerIdentity != null) {
-                        group.setOwner(ownerIdentity);
-                    }
+    if (ownerIdentity != null) {
+        group.setOwner(ownerIdentity);
+    }
 
-                }
+}
 
-                context.saveObject(group);
+context.saveObject(group);
 
-                result = "Group created successfully: " + groupName;
+result = "Group created successfully: " + groupName;
 
             </Source>
         </Script>
@@ -92,14 +92,16 @@
 
     </Step>
 
-    <!-- ================= COMMIT ================= -->
+    <!-- COMMIT -->
 
     <Step name="Commit Changes">
 
         <Script>
             <Source>
 
-                context.commitTransaction();
+import sailpoint.api.SailPointContext;
+
+context.commitTransaction();
 
             </Source>
         </Script>
@@ -108,7 +110,7 @@
 
     </Step>
 
-    <!-- ================= END ================= -->
+    <!-- END -->
 
     <Step name="End" icon="Stop"/>
 
