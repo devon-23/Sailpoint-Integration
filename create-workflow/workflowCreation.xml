@@ -50,11 +50,11 @@ try {
   // Create provisioning plan
   ProvisioningPlan plan = new ProvisioningPlan();
   
-  // Create account request the simple way
+  // Create account request
   ProvisioningPlan.AccountRequest acctReq = new ProvisioningPlan.AccountRequest();
   acctReq.setApplication(applicationName);
   
-  // Add attributes
+  // Add attributes one by one
   ProvisioningPlan.AttributeRequest attr1 = new ProvisioningPlan.AttributeRequest();
   attr1.setName("sAMAccountName");
   attr1.setValue(groupName);
@@ -126,32 +126,44 @@ try {
   
   plan.add(acctReq);
   
-  log.info("Plan created, executing...");
+  log.info("Plan created with attributes, executing...");
   
-  // Execute plan
+  // Execute plan - IIQ 8.4 way
+  // Get the connector configuration, not the connector object
   sailpoint.connector.Connector connector = app.getConnector();
   
   if (connector == null) {
-    log.error("Connector not found");
+    log.error("Cannot get connector from application");
     isSuccess = false;
-    errorMessage = "Connector not found";
+    errorMessage = "No connector available";
     return;
   }
   
-  connector.provision(context, app, plan);
+  log.info("Connector obtained, provisioning...");
   
-  log.info("Group created successfully!");
+  // Call provision
+  Object result = connector.provision(context, app, plan);
+  
+  log.info("Provisioning completed");
+  log.info("Result: " + (result != null ? result.toString() : "null"));
+  
   isSuccess = true;
   errorMessage = null;
+  log.info("Group created successfully!");
+  
+} catch (ClassCastException cce) {
+  log.error("Cast error: " + cce.getMessage());
+  isSuccess = false;
+  errorMessage = "Cast error getting connector: " + cce.getMessage();
   
 } catch (Exception e) {
-  log.error("Exception: " + e.getClass().getName() + " - " + e.getMessage());
+  log.error("Exception: " + e.getClass().getName());
+  log.error("Message: " + e.getMessage());
   isSuccess = false;
   errorMessage = e.getMessage();
   
-  StackTraceElement[] trace = e.getStackTrace();
-  if (trace != null &amp;&amp; trace.length > 0) {
-    log.error("  at " + trace[0].toString());
+  if (e.getStackTrace() != null &amp;&amp; e.getStackTrace().length > 0) {
+    log.error("Stack: " + e.getStackTrace()[0].toString());
   }
 }
 
