@@ -1,0 +1,20 @@
+public void triggerWorkflow(String identityName,String applicationName,String nativeIdentityAccount, String operation, String trigger,String event ){  
+    Workflow wf = (Workflow)context.getObjectByName(Workflow.class,"FIS Lifecycle Event - 90 Day Inactive");
+    HashMap launchArgsMap = new HashMap();
+
+    launchArgsMap.put("identityName",identityName);
+    launchArgsMap.put("applicationName",applicationName);
+    launchArgsMap.put("accountNativeIdentity",nativeIdentityAccount);  
+    launchArgsMap.put("operation", operation);
+    launchArgsMap.put("trigger",trigger);
+    launchArgsMap.put("event", event);
+
+    WorkflowLaunch wflaunch = new WorkflowLaunch();
+    wflaunch.setWorkflowName(wf.getName());
+    wflaunch.setWorkflowRef(wf.getName());
+    wflaunch.setCaseName("Identity Update for ");
+    wflaunch.setVariables(launchArgsMap);
+
+    Workflower workflower = new Workflower(context);
+    WorkflowLaunch launch = workflower.launch(wflaunch);
+  }
