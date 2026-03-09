@@ -17,70 +17,145 @@
 <Variable name="requestId" type="string"/>
 
 <Step name="Start">
-<Transition to="DoWork"/>
+<Transition to="CreateGroup"/>
 </Step>
 
-<Step name="DoWork">
+<Step name="CreateGroup">
 <Script>
 <Source>
 import sailpoint.object.*;
 import sailpoint.tools.*;
 import java.util.*;
 
+log.info("===== Create AD Group =====");
+
+requestId = UUID.randomUUID().toString();
+log.info("RequestID: " + requestId);
+log.info("GroupName: " + groupName);
+log.info("ApplicationName: " + applicationName);
+
 try {
-  requestId = UUID.randomUUID().toString();
-  log.info("RequestID: " + requestId);
-  log.info("GroupName: " + groupName);
-  log.info("AppName: " + applicationName);
-  
   // Get the AD application
-  Workflow wf = context.getObjectByName(Workflow.class, "Create AD Group from API");
   Application app = context.getObjectByName(Application.class, applicationName);
   
   if (app == null) {
-    errorMessage = "Application not found";
+    log.error("Application not found: " + applicationName);
     isSuccess = false;
-  } else {
-    log.info("App found");
-    
-    // Create provisioning plan
-    ProvisioningPlan plan = new ProvisioningPlan();
-    ProvisioningPlan.AccountRequest acctReq = new ProvisioningPlan.AccountRequest(
-      ProvisioningPlan.AccountRequest.Type.Create, applicationName, null, null);
-    
-    // Add attributes
-    acctReq.add(new ProvisioningPlan.AttributeRequest("sAMAccountName", ProvisioningPlan.Operation.Set, groupName));
-    acctReq.add(new ProvisioningPlan.AttributeRequest("cn", ProvisioningPlan.Operation.Set, groupName));
-    acctReq.add(new ProvisioningPlan.AttributeRequest("displayName", ProvisioningPlan.Operation.Set, groupName));
-    acctReq.add(new ProvisioningPlan.AttributeRequest("description", ProvisioningPlan.Operation.Set, groupDescription));
-    acctReq.add(new ProvisioningPlan.AttributeRequest("groupType", ProvisioningPlan.Operation.Set, groupType));
-    acctReq.add(new ProvisioningPlan.AttributeRequest("groupScope", ProvisioningPlan.Operation.Set, groupScope));
-    acctReq.add(new ProvisioningPlan.AttributeRequest("ou", ProvisioningPlan.Operation.Set, organizationalUnit));
-    acctReq.add(new ProvisioningPlan.AttributeRequest("managedBy", ProvisioningPlan.Operation.Set, groupOwner));
-    
-    if (groupEmail != null &amp;&amp; groupEmail.length() > 0) {
-      acctReq.add(new ProvisioningPlan.AttributeRequest("mail", ProvisioningPlan.Operation.Set, groupEmail));
-    }
-    
-    plan.add(acctReq);
-    
-    // Execute plan
-    sailpoint.connector.Connector connector = app.getConnector();
-    if (connector != null) {
-      connector.provision(context, app, plan);
-      log.info("SUCCESS: Group created");
-      isSuccess = true;
-    } else {
-      errorMessage = "No connector";
-      isSuccess = false;
+    errorMessage = "Application not found";
+    return;
+  }
+  
+  log.info("Application found");
+  
+  // Create provisioning plan
+  ProvisioningPlan plan = new ProvisioningPlan();
+  
+  // Create account request the simple way
+  ProvisioningPlan.AccountRequest acctReq = new ProvisioningPlan.AccountRequest();
+  acctReq.setApplication(applicationName);
+  
+  // Add attributes
+  ProvisioningPlan.AttributeRequest attr1 = new ProvisioningPlan.AttributeRequest();
+  attr1.setName("sAMAccountName");
+  attr1.setValue(groupName);
+  attr1.setOperation(ProvisioningPlan.Operation.Set);
+  acctReq.add(attr1);
+  
+  ProvisioningPlan.AttributeRequest attr2 = new ProvisioningPlan.AttributeRequest();
+  attr2.setName("cn");
+  attr2.setValue(groupName);
+  attr2.setOperation(ProvisioningPlan.Operation.Set);
+  acctReq.add(attr2);
+  
+  ProvisioningPlan.AttributeRequest attr3 = new ProvisioningPlan.AttributeRequest();
+  attr3.setName("displayName");
+  attr3.setValue(groupName);
+  attr3.setOperation(ProvisioningPlan.Operation.Set);
+  acctReq.add(attr3);
+  
+  ProvisioningPlan.AttributeRequest attr4 = new ProvisioningPlan.AttributeRequest();
+  attr4.setName("description");
+  attr4.setValue(groupDescription);
+  attr4.setOperation(ProvisioningPlan.Operation.Set);
+  acctReq.add(attr4);
+  
+  ProvisioningPlan.AttributeRequest attr5 = new ProvisioningPlan.AttributeRequest();
+  attr5.setName("groupType");
+  attr5.setValue(groupType);
+  attr5.setOperation(ProvisioningPlan.Operation.Set);
+  acctReq.add(attr5);
+  
+  ProvisioningPlan.AttributeRequest attr6 = new ProvisioningPlan.AttributeRequest();
+  attr6.setName("groupScope");
+  attr6.setValue(groupScope);
+  attr6.setOperation(ProvisioningPlan.Operation.Set);
+  acctReq.add(attr6);
+  
+  ProvisioningPlan.AttributeRequest attr7 = new ProvisioningPlan.AttributeRequest();
+  attr7.setName("ou");
+  attr7.setValue(organizationalUnit);
+  attr7.setOperation(ProvisioningPlan.Operation.Set);
+  acctReq.add(attr7);
+  
+  ProvisioningPlan.AttributeRequest attr8 = new ProvisioningPlan.AttributeRequest();
+  attr8.setName("managedBy");
+  attr8.setValue(groupOwner);
+  attr8.setOperation(ProvisioningPlan.Operation.Set);
+  acctReq.add(attr8);
+  
+  if (groupEmail != null &amp;&amp; groupEmail.length() > 0) {
+    ProvisioningPlan.AttributeRequest attrEmail = new ProvisioningPlan.AttributeRequest();
+    attrEmail.setName("mail");
+    attrEmail.setValue(groupEmail);
+    attrEmail.setOperation(ProvisioningPlan.Operation.Set);
+    acctReq.add(attrEmail);
+  }
+  
+  if (additionalAttributes != null &amp;&amp; additionalAttributes.size() > 0) {
+    for (Object key : additionalAttributes.keySet()) {
+      String attrName = (String) key;
+      Object attrValue = additionalAttributes.get(attrName);
+      
+      ProvisioningPlan.AttributeRequest attrCustom = new ProvisioningPlan.AttributeRequest();
+      attrCustom.setName(attrName);
+      attrCustom.setValue(attrValue);
+      attrCustom.setOperation(ProvisioningPlan.Operation.Set);
+      acctReq.add(attrCustom);
     }
   }
   
+  plan.add(acctReq);
+  
+  log.info("Plan created, executing...");
+  
+  // Execute plan
+  sailpoint.connector.Connector connector = app.getConnector();
+  
+  if (connector == null) {
+    log.error("Connector not found");
+    isSuccess = false;
+    errorMessage = "Connector not found";
+    return;
+  }
+  
+  connector.provision(context, app, plan);
+  
+  log.info("Group created successfully!");
+  isSuccess = true;
+  errorMessage = null;
+  
 } catch (Exception e) {
-  errorMessage = e.getMessage();
+  log.error("Exception: " + e.getClass().getName() + " - " + e.getMessage());
   isSuccess = false;
-  log.error("Error: " + errorMessage);
+  errorMessage = e.getMessage();
+  
+  StackTraceElement[] trace = e.getStackTrace();
+  if (trace != null &amp;&amp; trace.length > 0) {
+    log.error("  at " + trace[0].toString());
+  }
 }
+
+log.info("Result: isSuccess=" + isSuccess + ", error=" + errorMessage);
 </Source>
 </Script>
 <Transition to="End"/>
