@@ -48,7 +48,7 @@ try {
   
   log.info("Application found");
   
-  log.info("Step 2: Get Connector using ConnectorFactory");
+  log.info("Step 2: Get Connector");
   Connector connector = ConnectorFactory.getConnector(app, null);
   
   if (connector == null) {
@@ -140,10 +140,17 @@ try {
   
   plan.add(acctReq);
   
-  log.info("Step 6: Execute Provisioning via Connector");
-  Object result = connector.provision(context, app, plan);
+  log.info("Step 6: Execute Provisioning");
   
-  log.info("Provisioning result: " + (result != null ? result.toString() : "null"));
+  // In IIQ 8.4, use executeRequest instead of provision
+  // executeRequest(RequestDefinition request, Identifiable entity)
+  RequestDefinition requestDef = new RequestDefinition();
+  requestDef.setApplication(app);
+  requestDef.setAccountRequest(acctReq);
+  
+  Object result = connector.executeRequest(requestDef, null);
+  
+  log.info("Result: " + (result != null ? result.toString() : "null"));
   
   isSuccess = true;
   errorMessage = null;
@@ -160,7 +167,7 @@ try {
   }
 }
 
-log.info("Final Result: isSuccess=" + isSuccess + ", error=" + errorMessage);
+log.info("Final: isSuccess=" + isSuccess);
 </Source>
 </Script>
 <Transition to="End"/>
