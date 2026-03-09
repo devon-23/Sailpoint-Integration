@@ -1,167 +1,191 @@
-<?xml version='1.0' encoding='UTF-8'?>
+<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE Workflow PUBLIC "sailpoint.dtd" "sailpoint.dtd">
-<Workflow name="Create Entitlement Group" type="Subprocess">
-  <Description>Creates a new entitlement group with specified parameters</Description>
+<Workflow name="Create AD Group from API" type="Subprocess">
+
+<Variable name="applicationName" type="string"/>
+<Variable name="groupName" type="string"/>
+<Variable name="groupDescription" type="string"/>
+<Variable name="groupOwner" type="string"/>
+<Variable name="groupType" type="string"/>
+<Variable name="groupScope" type="string"/>
+<Variable name="organizationalUnit" type="string"/>
+<Variable name="groupEmail" type="string"/>
+<Variable name="additionalAttributes" type="map"/>
+
+<Variable name="isSuccess" type="boolean"/>
+<Variable name="errorMessage" type="string"/>
+<Variable name="requestId" type="string"/>
+
+<Step name="Start">
+<Transition to="CreateGroup"/>
+</Step>
+
+<Step name="CreateGroup">
+<Script>
+<Source>
+import sailpoint.object.*;
+import sailpoint.tools.*;
+import sailpoint.connector.*;
+import java.util.*;
+
+log.info("===== Create AD Group =====");
+
+requestId = UUID.randomUUID().toString();
+log.info("RequestID: " + requestId);
+log.info("GroupName: " + groupName);
+log.info("ApplicationName: " + applicationName);
+
+try {
+  // Get the AD application
+  Application app = context.getObjectByName(Application.class, applicationName);
   
-  <!-- Input Variables -->
-  <Variable name="applicationName" type="string"/>
-  <Variable name="groupName" type="string"/>
-  <Variable name="groupDescription" type="string"/>
-  <Variable name="groupOwner" type="string"/>
-  <Variable name="displayName" type="string"/>
-  <Variable name="errorMessage" type="string"/>
-  <Variable name="createdGroupId" type="string"/>
-  <Variable name="workflowResult" type="string"/>
+  if (app == null) {
+    log.error("Application not found: " + applicationName);
+    isSuccess = false;
+    errorMessage = "Application not found";
+    return;
+  }
   
-  <Step name="Validate Input" resultVariable="workflowResult">
-    <Description>Validate that all required parameters are provided</Description>
-    <Script>
-      <Source>
-        import sailpoint.object.Entitlement;
-        
-        // Validate required parameters
-        if (applicationName == null || applicationName.isEmpty()) {
-          throw new Exception("applicationName is required");
-        }
-        if (groupName == null || groupName.isEmpty()) {
-          throw new Exception("groupName is required");
-        }
-        if (groupDescription == null || groupDescription.isEmpty()) {
-          throw new Exception("groupDescription is required");
-        }
-        
-        log.info("Input validation successful for application: " + applicationName + ", group: " + groupName);
-        return "VALIDATED";
-      </Source>
-    </Script>
-    <Transition to="Get Application Object"/>
-  </Step>
+  log.info("Application found");
   
-  <Step name="Get Application Object" resultVariable="application">
-    <Description>Retrieve the Application object by name</Description>
-    <Script>
-      <Source>
-        import sailpoint.object.Application;
-        import sailpoint.object.QueryOptions;
-        
-        QueryOptions qo = new QueryOptions();
-        qo.addFilter("name", applicationName);
-        
-        Application app = context.getObjectByQuery(Application.class, qo);
-        
-        if (app == null) {
-          throw new Exception("Application not found: " + applicationName);
-        }
-        
-        log.info("Retrieved application: " + app.getName() + " (ID: " + app.getId() + ")");
-        return app;
-      </Source>
-    </Script>
-    <Transition to="Check Group Existence"/>
-  </Step>
+  // In IIQ 8.4, getConnector() returns a String (the connector class name)
+  // We need to use ConnectorFactory to get the actual connector instance
+  String connectorClass = app.getConnector();
+  log.info("Connector class: " + connectorClass);
   
-  <Step name="Check Group Existence" resultVariable="existingGroup">
-    <Description>Check if entitlement group already exists</Description>
-    <Script>
-      <Source>
-        import sailpoint.object.Entitlement;
-        import sailpoint.object.QueryOptions;
-        
-        QueryOptions qo = new QueryOptions();
-        qo.addFilter("name", groupName);
-        qo.addFilter("applicationId", application.getId());
-        
-        Entitlement existingEntitlement = context.getObjectByQuery(Entitlement.class, qo);
-        
-        if (existingEntitlement != null) {
-          log.warn("Entitlement group already exists: " + groupName);
-          return existingEntitlement;
-        }
-        
-        log.info("No existing entitlement found with name: " + groupName);
-        return null;
-      </Source>
-    </Script>
-    <Transition to="Decision - Group Exists">
-      <GuardExpression>
-        <Expression language="beanshell">
-          existingGroup != null
-        </Expression>
-      </GuardExpression>
-      <TrueTransition to="Return Existing Group"/>
-      <FalseTransition to="Create New Entitlement Group"/>
-    </Transition>
-  </Step>
+  if (connectorClass == null || connectorClass.isEmpty()) {
+    log.error("No connector configured for application");
+    isSuccess = false;
+    errorMessage = "No connector configured";
+    return;
+  }
   
-  <Step name="Decision - Group Exists" type="Decision">
-    <Description>Route based on whether group already exists</Description>
-    <DefaultTransition to="Create New Entitlement Group"/>
-  </Step>
+  // Get the actual connector instance using ConnectorFactory
+  ConnectorFactory factory = ConnectorFactory.getConnectorFactory();
+  Connector connector = factory.getConnector(app, context);
   
-  <Step name="Return Existing Group">
-    <Description>Return the existing entitlement group ID</Description>
-    <Script>
-      <Source>
-        createdGroupId = existingGroup.getId();
-        workflowResult = "GROUP_ALREADY_EXISTS";
-        log.info("Entitlement group already exists with ID: " + createdGroupId);
-        return createdGroupId;
-      </Source>
-    </Script>
-    <Transition to="End"/>
-  </Step>
+  if (connector == null) {
+    log.error("Could not instantiate connector");
+    isSuccess = false;
+    errorMessage = "Could not instantiate connector";
+    return;
+  }
   
-  <Step name="Create New Entitlement Group" resultVariable="createdGroupId">
-    <Description>Create a new entitlement group</Description>
-    <Script>
-      <Source>
-        import sailpoint.object.Entitlement;
-        
-        Entitlement entitlement = new Entitlement();
-        entitlement.setName(groupName);
-        entitlement.setDisplayName(displayName != null ? displayName : groupName);
-        entitlement.setDescription(groupDescription);
-        entitlement.setApplicationId(application.getId());
-        
-        // Set the type to "group" if the application supports it
-        entitlement.setAttribute("type", "group");
-        
-        // Set owner if provided
-        if (groupOwner != null && !groupOwner.isEmpty()) {
-          entitlement.setOwner(groupOwner);
-        }
-        
-        // Save the new entitlement
-        context.saveObject(entitlement);
-        context.commitTransaction();
-        
-        log.info("Successfully created entitlement group: " + groupName + " (ID: " + entitlement.getId() + ")");
-        workflowResult = "SUCCESS";
-        
-        return entitlement.getId();
-      </Source>
-    </Script>
-    <Transition to="End"/>
-  </Step>
+  log.info("Connector instantiated: " + connector.getClass().getName());
   
-  <Step name="End" type="Stop">
-    <Description>End of workflow</Description>
-    <Attributes>
-      <Map>
-        <Entry key="auditLog" value="true"/>
-      </Map>
-    </Attributes>
-  </Step>
+  // Create provisioning plan
+  ProvisioningPlan plan = new ProvisioningPlan();
   
-  <!-- Exception Handler -->
-  <Step name="Handle Exception" type="Stop">
-    <Script>
-      <Source>
-        workflowResult = "ERROR";
-        log.error("Workflow error: " + exception.getMessage());
-        return exception.getMessage();
-      </Source>
-    </Script>
-  </Step>
+  // Create account request
+  ProvisioningPlan.AccountRequest acctReq = new ProvisioningPlan.AccountRequest();
+  acctReq.setApplication(applicationName);
   
+  // Add attributes
+  ProvisioningPlan.AttributeRequest attr1 = new ProvisioningPlan.AttributeRequest();
+  attr1.setName("sAMAccountName");
+  attr1.setValue(groupName);
+  attr1.setOperation(ProvisioningPlan.Operation.Set);
+  acctReq.add(attr1);
+  
+  ProvisioningPlan.AttributeRequest attr2 = new ProvisioningPlan.AttributeRequest();
+  attr2.setName("cn");
+  attr2.setValue(groupName);
+  attr2.setOperation(ProvisioningPlan.Operation.Set);
+  acctReq.add(attr2);
+  
+  ProvisioningPlan.AttributeRequest attr3 = new ProvisioningPlan.AttributeRequest();
+  attr3.setName("displayName");
+  attr3.setValue(groupName);
+  attr3.setOperation(ProvisioningPlan.Operation.Set);
+  acctReq.add(attr3);
+  
+  ProvisioningPlan.AttributeRequest attr4 = new ProvisioningPlan.AttributeRequest();
+  attr4.setName("description");
+  attr4.setValue(groupDescription);
+  attr4.setOperation(ProvisioningPlan.Operation.Set);
+  acctReq.add(attr4);
+  
+  ProvisioningPlan.AttributeRequest attr5 = new ProvisioningPlan.AttributeRequest();
+  attr5.setName("groupType");
+  attr5.setValue(groupType);
+  attr5.setOperation(ProvisioningPlan.Operation.Set);
+  acctReq.add(attr5);
+  
+  ProvisioningPlan.AttributeRequest attr6 = new ProvisioningPlan.AttributeRequest();
+  attr6.setName("groupScope");
+  attr6.setValue(groupScope);
+  attr6.setOperation(ProvisioningPlan.Operation.Set);
+  acctReq.add(attr6);
+  
+  ProvisioningPlan.AttributeRequest attr7 = new ProvisioningPlan.AttributeRequest();
+  attr7.setName("ou");
+  attr7.setValue(organizationalUnit);
+  attr7.setOperation(ProvisioningPlan.Operation.Set);
+  acctReq.add(attr7);
+  
+  ProvisioningPlan.AttributeRequest attr8 = new ProvisioningPlan.AttributeRequest();
+  attr8.setName("managedBy");
+  attr8.setValue(groupOwner);
+  attr8.setOperation(ProvisioningPlan.Operation.Set);
+  acctReq.add(attr8);
+  
+  if (groupEmail != null &amp;&amp; groupEmail.length() > 0) {
+    ProvisioningPlan.AttributeRequest attrEmail = new ProvisioningPlan.AttributeRequest();
+    attrEmail.setName("mail");
+    attrEmail.setValue(groupEmail);
+    attrEmail.setOperation(ProvisioningPlan.Operation.Set);
+    acctReq.add(attrEmail);
+  }
+  
+  if (additionalAttributes != null &amp;&amp; additionalAttributes.size() > 0) {
+    for (Object key : additionalAttributes.keySet()) {
+      String attrName = (String) key;
+      Object attrValue = additionalAttributes.get(attrName);
+      
+      ProvisioningPlan.AttributeRequest attrCustom = new ProvisioningPlan.AttributeRequest();
+      attrCustom.setName(attrName);
+      attrCustom.setValue(attrValue);
+      attrCustom.setOperation(ProvisioningPlan.Operation.Set);
+      acctReq.add(attrCustom);
+    }
+  }
+  
+  plan.add(acctReq);
+  
+  log.info("Plan created with attributes, executing...");
+  
+  // Execute provisioning
+  Object result = connector.provision(context, app, plan);
+  
+  log.info("Provisioning completed");
+  log.info("Result: " + (result != null ? result.toString() : "null"));
+  
+  isSuccess = true;
+  errorMessage = null;
+  log.info("SUCCESS: Group created!");
+  
+} catch (ClassCastException cce) {
+  log.error("ClassCastException: " + cce.getMessage());
+  isSuccess = false;
+  errorMessage = "Cast error: " + cce.getMessage();
+  
+} catch (Exception e) {
+  log.error("Exception: " + e.getClass().getName());
+  log.error("Message: " + e.getMessage());
+  isSuccess = false;
+  errorMessage = e.getMessage();
+  
+  if (e.getStackTrace() != null &amp;&amp; e.getStackTrace().length > 0) {
+    log.error("At: " + e.getStackTrace()[0].toString());
+  }
+}
+
+log.info("Result: isSuccess=" + isSuccess + ", error=" + errorMessage);
+</Source>
+</Script>
+<Transition to="End"/>
+</Step>
+
+<Step name="End"/>
+
 </Workflow>
