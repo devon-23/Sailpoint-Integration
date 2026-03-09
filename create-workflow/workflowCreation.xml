@@ -1,84 +1,115 @@
-<?xml version='1.0' encoding='UTF-8'?>
+<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE Workflow PUBLIC "sailpoint.dtd" "sailpoint.dtd">
 
 <Workflow name="CreateADGroupWorkflow" type="Generic">
 
-  <Variable name="applicationName" input="true" required="true"/>
-  <Variable name="groupName" input="true" required="true"/>
-  <Variable name="description" input="true"/>
-  <Variable name="owner" input="true"/>
-  <Variable name="requester" input="true"/>
-  <Variable name="result" output="true"/>
+    <!-- ================= VARIABLES ================= -->
 
-  <!-- START -->
+    <Variable name="applicationName" input="true" required="true"/>
+    <Variable name="groupName" input="true" required="true"/>
+    <Variable name="description" input="true"/>
+    <Variable name="owner" input="true"/>
+    <Variable name="requester" input="true"/>
+    <Variable name="result" output="true"/>
 
-  <Step name="Start" icon="Start">
-      <Transition to="Validate Inputs"/>
-  </Step>
+    <!-- ================= START ================= -->
 
-  <!-- VALIDATE INPUTS -->
+    <Step name="Start" icon="Start">
+        <Transition to="Validate Inputs"/>
+    </Step>
 
-  <Step name="Validate Inputs">
+    <!-- ================= VALIDATE INPUTS ================= -->
 
-    <Script>
-      if (groupName == null || groupName.trim().length() == 0) {
-        throw new GeneralException("Group name is required");
-      }
+    <Step name="Validate Inputs">
 
-      if (applicationName == null || applicationName.trim().length() == 0) {
-        throw new GeneralException("Application name is required");
-      }
-    </Script>
+        <Script>
+            <Source>
 
-    <Transition to="Create Entitlement"/>
+                import sailpoint.tools.GeneralException;
 
-  </Step>
+                if (groupName == null || groupName.trim().length() == 0) {
+                    throw new GeneralException("Group name is required");
+                }
 
-  <!-- CREATE ENTITLEMENT -->
+                if (applicationName == null || applicationName.trim().length() == 0) {
+                    throw new GeneralException("Application name is required");
+                }
 
-  <Step name="Create Entitlement">
+            </Source>
+        </Script>
 
-    <Script>
+        <Transition to="Create Entitlement"/>
 
-      import sailpoint.object.Application;
-      import sailpoint.object.ManagedAttribute;
+    </Step>
 
-      Application app = context.getObjectByName(Application.class, applicationName);
+    <!-- ================= CREATE ENTITLEMENT ================= -->
 
-      if (app == null) {
-        throw new GeneralException("Application not found: " + applicationName);
-      }
+    <Step name="Create Entitlement">
 
-      ManagedAttribute group = new ManagedAttribute();
+        <Script>
+            <Source>
 
-      group.setApplication(app);
-      group.setValue(groupName);
-      group.setDisplayName(groupName);
+                import sailpoint.object.Application;
+                import sailpoint.object.ManagedAttribute;
+                import sailpoint.object.Identity;
+                import sailpoint.tools.GeneralException;
 
-      context.saveObject(group);
+                Application app = context.getObjectByName(Application.class, applicationName);
 
-      result = "Group created successfully: " + groupName;
+                if (app == null) {
+                    throw new GeneralException("Application not found: " + applicationName);
+                }
 
-    </Script>
+                ManagedAttribute group = new ManagedAttribute();
 
-    <Transition to="Commit"/>
+                group.setApplication(app);
+                group.setValue(groupName);
+                group.setDisplayName(groupName);
 
-  </Step>
+                if (description != null) {
+                    group.setAttribute("description", description);
+                }
 
-  <!-- COMMIT -->
+                if (owner != null) {
 
-  <Step name="Commit">
+                    Identity ownerIdentity =
+                        context.getObjectByName(Identity.class, owner);
 
-    <Script>
-      context.commitTransaction();
-    </Script>
+                    if (ownerIdentity != null) {
+                        group.setOwner(ownerIdentity);
+                    }
 
-    <Transition to="End"/>
+                }
 
-  </Step>
+                context.saveObject(group);
 
-  <!-- END -->
+                result = "Group created successfully: " + groupName;
 
-  <Step name="End" icon="Stop"/>
+            </Source>
+        </Script>
+
+        <Transition to="Commit Changes"/>
+
+    </Step>
+
+    <!-- ================= COMMIT ================= -->
+
+    <Step name="Commit Changes">
+
+        <Script>
+            <Source>
+
+                context.commitTransaction();
+
+            </Source>
+        </Script>
+
+        <Transition to="End"/>
+
+    </Step>
+
+    <!-- ================= END ================= -->
+
+    <Step name="End" icon="Stop"/>
 
 </Workflow>
