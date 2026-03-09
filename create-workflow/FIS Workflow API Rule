@@ -1,66 +1,67 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE Rule PUBLIC "sailpoint.dtd" "sailpoint.dtd">
 
-<Rule name="Test-Create-AD-Group-Workflow" type="Generic">
-  <Description>
-    Test rule to launch CreateADGroupWorkflow with sample inputs.
-  </Description>
+<Rule name="Test-Launch-CreateADGroupWorkflow" type="Generic">
+  <Description>Launch CreateADGroupWorkflow for testing</Description>
 
   <Source>
 
 import sailpoint.object.Workflow;
 import sailpoint.object.WorkflowLaunch;
-import sailpoint.api.WorkflowService;
-import sailpoint.object.Attributes;
-import sailpoint.object.Identity;
+import sailpoint.api.Workflower;
+import java.util.HashMap;
 
-log.info("Starting test rule for CreateADGroupWorkflow");
+/* -------------------------
+   TEST INPUT VALUES
+------------------------- */
 
-/* ------------------------------------
-   Define workflow inputs
------------------------------------- */
+String applicationName = "Active Directory";
+String groupName = "TEST_AD_GROUP_001";
+String description = "Test group from workflow";
+String owner = "spadmin";
+String requester = "spadmin";
 
-Attributes wfArgs = new Attributes();
+/* -------------------------
+   GET WORKFLOW
+------------------------- */
 
-wfArgs.put("applicationName", "Active Directory");
-wfArgs.put("groupName", "APP_TEST_FINANCE_READ");
-wfArgs.put("description", "Finance Read Access Test Group");
-wfArgs.put("owner", "spadmin");
-wfArgs.put("requester", "spadmin");
-
-/* ------------------------------------
-   Get workflow
------------------------------------- */
-
-Workflow wf = context.getObjectByName(Workflow.class, "CreateADGroupWorkflow");
+Workflow wf = (Workflow) context.getObjectByName(Workflow.class, "CreateADGroupWorkflow");
 
 if (wf == null) {
-    throw new GeneralException("Workflow not found");
+    throw new Exception("Workflow not found: CreateADGroupWorkflow");
 }
 
-/* ------------------------------------
-   Launch workflow
------------------------------------- */
+/* -------------------------
+   BUILD ARGUMENT MAP
+------------------------- */
 
-WorkflowLaunch launch = new WorkflowLaunch();
+HashMap launchArgsMap = new HashMap();
 
-launch.setWorkflowName(wf.getName());
-launch.setVariables(wfArgs);
+launchArgsMap.put("applicationName", applicationName);
+launchArgsMap.put("groupName", groupName);
+launchArgsMap.put("description", description);
+launchArgsMap.put("owner", owner);
+launchArgsMap.put("requester", requester);
 
-Identity launcher = context.getObjectByName(Identity.class, "spadmin");
-launch.setLauncher(launcher);
+/* -------------------------
+   PREPARE WORKFLOW LAUNCH
+------------------------- */
 
-/* ------------------------------------
-   Start workflow
------------------------------------- */
+WorkflowLaunch wflaunch = new WorkflowLaunch();
 
-WorkflowService wfService = new WorkflowService(context);
+wflaunch.setWorkflowName(wf.getName());
+wflaunch.setWorkflowRef(wf.getName());
+wflaunch.setCaseName("Create AD Group Test - " + groupName);
+wflaunch.setVariables(launchArgsMap);
 
-wfService.launch(launch);
+/* -------------------------
+   LAUNCH WORKFLOW
+------------------------- */
 
-log.info("Workflow launched successfully");
+Workflower workflower = new Workflower(context);
+WorkflowLaunch launch = workflower.launch(wflaunch);
 
-return "Workflow launch request submitted.";
+return "Workflow Launched: " + launch.getCaseName();
 
   </Source>
 </Rule>
