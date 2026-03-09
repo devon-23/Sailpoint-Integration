@@ -60,19 +60,13 @@ if (null == organizationalUnit || organizationalUnit.trim().isEmpty()) {
 if (errors.size() > 0) {
   errorMessage = "Validation Failed: " + errors.toString();
   isSuccess = false;
-  return false;
+} else {
+  isSuccess = true;
 }
-
-isSuccess = true;
-return true;
 </Source>
 </Script>
-<Transition to="GetADApplication">
-<Arg name="test" value="isSuccess"/>
-</Transition>
-<Transition to="HandleError">
-<Arg name="test" value="!isSuccess"/>
-</Transition>
+<Transition to="GetADApplication" when="isSuccess == true"/>
+<Transition to="HandleError"/>
 </Step>
 
 <Step name="GetADApplication">
@@ -83,18 +77,13 @@ adApplication = context.getObjectByName(sailpoint.object.Application.class, appl
 if (null == adApplication) {
   errorMessage = "Application not found: " + applicationName;
   isSuccess = false;
-  return false;
+} else {
+  isSuccess = true;
 }
-isSuccess = true;
-return true;
 </Source>
 </Script>
-<Transition to="BuildPlan">
-<Arg name="test" value="isSuccess"/>
-</Transition>
-<Transition to="HandleError">
-<Arg name="test" value="!isSuccess"/>
-</Transition>
+<Transition to="BuildPlan" when="isSuccess == true"/>
+<Transition to="HandleError"/>
 </Step>
 
 <Step name="BuildPlan">
@@ -134,20 +123,14 @@ try {
   plan.add(acctReq);
   workflow.put("provisioningPlan", plan);
   isSuccess = true;
-  return true;
 } catch (Exception e) {
   errorMessage = "Error building plan: " + e.getMessage();
   isSuccess = false;
-  return false;
 }
 </Source>
 </Script>
-<Transition to="ExecutePlan">
-<Arg name="test" value="isSuccess"/>
-</Transition>
-<Transition to="HandleError">
-<Arg name="test" value="!isSuccess"/>
-</Transition>
+<Transition to="ExecutePlan" when="isSuccess == true"/>
+<Transition to="HandleError"/>
 </Step>
 
 <Step name="ExecutePlan">
@@ -161,33 +144,25 @@ try {
   if (null == plan) {
     errorMessage = "Plan not found";
     isSuccess = false;
-    return false;
+  } else {
+    sailpoint.connector.Connector connector = adApplication.getConnector();
+    if (null == connector) {
+      errorMessage = "Connector not found";
+      isSuccess = false;
+    } else {
+      connector.provision(context, adApplication, plan);
+      log.info("Group created successfully");
+      isSuccess = true;
+    }
   }
-  
-  sailpoint.connector.Connector connector = adApplication.getConnector();
-  if (null == connector) {
-    errorMessage = "Connector not found";
-    isSuccess = false;
-    return false;
-  }
-  
-  connector.provision(context, adApplication, plan);
-  log.info("Group created successfully");
-  isSuccess = true;
-  return true;
 } catch (Exception e) {
   errorMessage = "Error: " + e.getMessage();
   isSuccess = false;
-  return false;
 }
 </Source>
 </Script>
-<Transition to="Audit">
-<Arg name="test" value="isSuccess"/>
-</Transition>
-<Transition to="HandleError">
-<Arg name="test" value="!isSuccess"/>
-</Transition>
+<Transition to="Audit" when="isSuccess == true"/>
+<Transition to="HandleError"/>
 </Step>
 
 <Step name="Audit">
@@ -214,6 +189,7 @@ try {
   
   context.saveObject(event);
   context.commitTransaction();
+  log.info("Audit logged");
 } catch (Exception e) {
   log.error("Audit error: " + e.getMessage());
 }
@@ -227,6 +203,8 @@ try {
 <Source>
 import sailpoint.object.*;
 import java.util.*;
+
+log.error("Workflow error: " + errorMessage);
 
 try {
   AuditEvent event = new AuditEvent();
