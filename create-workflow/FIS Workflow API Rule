@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE Rule PUBLIC "sailpoint.dtd" "sailpoint.dtd">
+<Rule name="Test Create AD Group Workflow" type="GenericObject">
+  <Description>
+    Test rule to execute the Create AD Group workflow
+    Run this in Admin Console under Tools > Rules to test the workflow
+  </Description>
+  <Signature returnType="void"/>
+  <Body>
+    <![CDATA[
+import sailpoint.object.*;
+import sailpoint.tools.*;
+import java.util.*;
+
+log.info("========== TEST: Create AD Group Workflow ==========");
+
+try {
+  // Get the workflow
+  String workflowName = "Create AD Group from API";
+  Workflow workflow = context.getObjectByName(Workflow.class, workflowName);
+  
+  if (workflow == null) {
+    log.error("Workflow not found: " + workflowName);
+    return;
+  }
+  
+  log.info("Found workflow: " + workflow.getName());
+  
+  // Create input parameters
+  Map workflowParams = new HashMap();
+  
+  // Set parameters for test group creation
+  workflowParams.put("applicationName", "Active Directory");
+  workflowParams.put("groupName", "TEST-Workflow-Group-" + System.currentTimeMillis());
+  workflowParams.put("groupDescription", "Test group created from rule");
+  workflowParams.put("groupOwner", "CN=Administrator,CN=Users,DC=company,DC=com");
+  workflowParams.put("groupType", "Security");
+  workflowParams.put("groupScope", "Global");
+  workflowParams.put("organizationalUnit", "CN=Users,DC=company,DC=com");
+  workflowParams.put("groupEmail", "testgroup@company.com");
+  
+  // Optional: Add additional attributes
+  Map additionalAttrs = new HashMap();
+  additionalAttrs.put("info", "Created from test rule");
+  additionalAttrs.put("notes", "Testing workflow execution");
+  workflowParams.put("additionalAttributes", additionalAttrs);
+  
+  log.info("Workflow parameters:");
+  for (Object key : workflowParams.keySet()) {
+    log.info("  " + key + " = " + workflowParams.get(key));
+  }
+  
+  // Launch the workflow
+  log.info("Executing workflow...");
+  WorkflowLaunchPoint launchPoint = new WorkflowLaunchPoint(workflow, workflowParams);
+  WorkflowEngine engine = new WorkflowEngine(context);
+  WorkflowCase workflowCase = engine.launchWorkflow(launchPoint);
+  
+  if (workflowCase == null) {
+    log.error("Failed to launch workflow");
+    return;
+  }
+  
+  log.info("Workflow launched with case ID: " + workflowCase.getId());
+  
+  // Wait for workflow to complete (with timeout)
+  long startTime = System.currentTimeMillis();
+  long timeout = 60000; // 60 seconds
+  
+  while (!workflowCase.isFinalized()) {
+    // Check if timeout exceeded
+    if (System.currentTimeMillis() - startTime > timeout) {
+      log.error("Workflow execution timed out after 60 seconds");
+      break;
+    }
+    
+    // Reload the case to get latest status
+    workflowCase = context.getObjectById(WorkflowCase.class, workflowCase.getId());
+    
+    if (workflowCase == null) {
+      log.error("Workflow case was deleted");
+      break;
+    }
+    
+    // Wait a bit before checking again
+    Thread.sleep(1000);
+    log.info("Waiting for workflow completion... Status: " + workflowCase.getState());
+  }
+  
+  // Get results
+  log.info("========== WORKFLOW RESULTS ==========");
+  log.info("Case ID: " + workflowCase.getId());
+  log.info("State: " + workflowCase.getState());
+  log.info("Status: " + workflowCase.getStatus());
+  
+  // Extract output variables
+  Map results = workflowCase.getVariables();
+  
+  if (results != null) {
+    log.info("Output Variables:");
+    
+    Object requestId = results.get("requestId");
+    Object isSuccess = results.get("isSuccess");
+    Object errorMessage = results.get("errorMessage");
+    Object auditLog = results.get("auditLog");
+    
+    log.info("  requestId: " + (requestId != null ? requestId : "null"));
+    log.info("  isSuccess: " + (isSuccess != null ? isSuccess : "null"));
+    log.info("  errorMessage: " + (errorMessage != null ? errorMessage : "null"));
+    log.info("  auditLog: " + (auditLog != null ? auditLog : "null"));
+    
+    // Detailed results
+    if (isSuccess != null && isSuccess.toString().equals("true")) {
+      log.info("\n✓ WORKFLOW SUCCESSFUL!");
+      log.info("Group Name: " + workflowParams.get("groupName"));
+      log.info("Request ID: " + requestId);
+      log.info("Duration: " + auditLog);
+    } else {
+      log.error("\n✗ WORKFLOW FAILED!");
+      log.error("Error: " + errorMessage);
+    }
+  } else {
+    log.warn("No output variables returned");
+  }
+  
+  log.info("========== TEST COMPLETE ==========");
+  
+} catch (Exception ex) {
+  log.error("Error executing test: " + ex.getMessage(), ex);
+  ex.printStackTrace();
+}
+    ]]>
+  </Body>
+</Rule>
