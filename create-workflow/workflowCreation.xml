@@ -3,10 +3,6 @@
 
 <Workflow name="CreateADGroupWorkflow" type="Generic">
 
-  <!-- ===================== -->
-  <!-- INPUT VARIABLES -->
-  <!-- ===================== -->
-
   <Variable name="applicationName" input="true" required="true"/>
   <Variable name="groupName" input="true" required="true"/>
   <Variable name="description" input="true"/>
@@ -14,17 +10,16 @@
   <Variable name="requester" input="true"/>
   <Variable name="result" output="true"/>
 
-  <!-- ===================== -->
   <!-- START -->
-  <!-- ===================== -->
 
-  <Start name="Start" to="Validate Inputs"/>
+  <Step name="Start" icon="Start">
+      <Transition to="Validate Inputs"/>
+  </Step>
 
-  <!-- ===================== -->
   <!-- VALIDATE INPUTS -->
-  <!-- ===================== -->
 
-  <Step name="Validate Inputs" to="Check Existing Entitlement">
+  <Step name="Validate Inputs">
+
     <Script>
       if (groupName == null || groupName.trim().length() == 0) {
         throw new GeneralException("Group name is required");
@@ -34,39 +29,21 @@
         throw new GeneralException("Application name is required");
       }
     </Script>
+
+    <Transition to="Create Entitlement"/>
+
   </Step>
 
-  <!-- ===================== -->
-  <!-- CHECK IF GROUP EXISTS -->
-  <!-- ===================== -->
-
-  <Step name="Check Existing Entitlement" resultVariable="existingGroup" to="Create Entitlement">
-    <Script>
-      import sailpoint.object.ManagedAttribute;
-
-      ManagedAttribute existing =
-        context.getObjectByName(ManagedAttribute.class, groupName);
-
-      return existing;
-    </Script>
-
-    <Transition to="Fail - Already Exists" when="existingGroup != null"/>
-  </Step>
-
-  <!-- ===================== -->
   <!-- CREATE ENTITLEMENT -->
-  <!-- ===================== -->
 
-  <Step name="Create Entitlement" to="Commit Changes">
+  <Step name="Create Entitlement">
 
     <Script>
 
       import sailpoint.object.Application;
       import sailpoint.object.ManagedAttribute;
-      import sailpoint.object.Identity;
 
-      Application app =
-        context.getObjectByName(Application.class, applicationName);
+      Application app = context.getObjectByName(Application.class, applicationName);
 
       if (app == null) {
         throw new GeneralException("Application not found: " + applicationName);
@@ -77,16 +54,6 @@
       group.setApplication(app);
       group.setValue(groupName);
       group.setDisplayName(groupName);
-      group.setAttribute("description", description);
-
-      if (owner != null) {
-        Identity ownerIdentity =
-          context.getObjectByName(Identity.class, owner);
-
-        if (ownerIdentity != null) {
-          group.setOwner(ownerIdentity);
-        }
-      }
 
       context.saveObject(group);
 
@@ -94,40 +61,24 @@
 
     </Script>
 
+    <Transition to="Commit"/>
+
   </Step>
 
-  <!-- ===================== -->
   <!-- COMMIT -->
-  <!-- ===================== -->
 
-  <Step name="Commit Changes" to="Success">
+  <Step name="Commit">
 
     <Script>
       context.commitTransaction();
     </Script>
 
-  </Step>
-
-  <!-- ===================== -->
-  <!-- SUCCESS -->
-  <!-- ===================== -->
-
-  <Step name="Success" icon="Task" posX="600" posY="200">
-    <Script>
-      log.info("CreateADGroupWorkflow completed successfully.");
-    </Script>
-  </Step>
-
-  <!-- ===================== -->
-  <!-- FAILURE -->
-  <!-- ===================== -->
-
-  <Step name="Fail - Already Exists" icon="Stop">
-
-    <Script>
-      throw new GeneralException("Group already exists: " + groupName);
-    </Script>
+    <Transition to="End"/>
 
   </Step>
+
+  <!-- END -->
+
+  <Step name="End" icon="Stop"/>
 
 </Workflow>
