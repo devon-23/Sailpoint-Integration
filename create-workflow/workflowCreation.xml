@@ -25,7 +25,7 @@
 <Source>
 import sailpoint.object.*;
 import sailpoint.tools.*;
-import sailpoint.connector.*;
+import sailpoint.request.*;
 import java.util.*;
 
 log.info("===== Create AD Group =====");
@@ -33,14 +33,13 @@ log.info("===== Create AD Group =====");
 requestId = UUID.randomUUID().toString();
 log.info("RequestID: " + requestId);
 log.info("GroupName: " + groupName);
-log.info("ApplicationName: " + applicationName);
 
 try {
   log.info("Step 1: Get Application");
   Application app = context.getObjectByName(Application.class, applicationName);
   
   if (app == null) {
-    log.error("Application not found: " + applicationName);
+    log.error("Application not found");
     isSuccess = false;
     errorMessage = "Application not found";
     return;
@@ -48,26 +47,15 @@ try {
   
   log.info("Application found");
   
-  log.info("Step 2: Get Connector");
-  Connector connector = ConnectorFactory.getConnector(app, null);
+  log.info("Step 2: Create Request Definition");
+  RequestDefinition reqDef = new RequestDefinition();
+  reqDef.setApplication(app);
   
-  if (connector == null) {
-    log.error("Could not get connector");
-    isSuccess = false;
-    errorMessage = "Could not instantiate connector";
-    return;
-  }
-  
-  log.info("Connector obtained: " + connector.getClass().getName());
-  
-  log.info("Step 3: Create Provisioning Plan");
-  ProvisioningPlan plan = new ProvisioningPlan();
-  
-  log.info("Step 4: Create Account Request");
+  log.info("Step 3: Create Account Request");
   ProvisioningPlan.AccountRequest acctReq = new ProvisioningPlan.AccountRequest();
   acctReq.setApplication(applicationName);
   
-  log.info("Step 5: Add Attributes");
+  log.info("Step 4: Add Attributes");
   
   ProvisioningPlan.AttributeRequest attr1 = new ProvisioningPlan.AttributeRequest();
   attr1.setName("sAMAccountName");
@@ -138,23 +126,26 @@ try {
     }
   }
   
-  plan.add(acctReq);
+  reqDef.setAccountRequest(acctReq);
   
-  log.info("Step 6: Execute Provisioning");
+  log.info("Step 5: Submit Request");
   
-  // In IIQ 8.4, use executeRequest instead of provision
-  // executeRequest(RequestDefinition request, Identifiable entity)
-  RequestDefinition requestDef = new RequestDefinition();
-  requestDef.setApplication(app);
-  requestDef.setAccountRequest(acctReq);
+  // Use RequestManager to submit the request
+  RequestManager rm = new RequestManager(context);
+  Request request = rm.submitRequest(reqDef);
   
-  Object result = connector.executeRequest(requestDef, null);
+  if (request == null) {
+    log.error("Request submission returned null");
+    isSuccess = false;
+    errorMessage = "Request submission failed";
+    return;
+  }
   
-  log.info("Result: " + (result != null ? result.toString() : "null"));
+  log.info("Request submitted: " + request.getId());
   
   isSuccess = true;
   errorMessage = null;
-  log.info("SUCCESS: Group created!");
+  log.info("SUCCESS: Request submitted!");
   
 } catch (Exception e) {
   log.error("EXCEPTION: " + e.getClass().getName());
@@ -162,12 +153,13 @@ try {
   isSuccess = false;
   errorMessage = e.getMessage();
   
-  if (e.getStackTrace() != null &amp;&amp; e.getStackTrace().length > 0) {
-    log.error("At: " + e.getStackTrace()[0].toString());
+  StackTraceElement[] st = e.getStackTrace();
+  if (st != null &amp;&amp; st.length > 0) {
+    log.error("Line: " + st[0].getLineNumber() + " in " + st[0].getMethodName());
   }
 }
 
-log.info("Final: isSuccess=" + isSuccess);
+log.info("Final: isSuccess=" + isSuccess + ", error=" + errorMessage);
 </Source>
 </Script>
 <Transition to="End"/>
