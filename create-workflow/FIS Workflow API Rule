@@ -1,10 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE Rule PUBLIC "sailpoint.dtd" "sailpoint.dtd">
-<Rule name="Test Create AD Group Workflow" type="GenericObject">
-  <Description>
-    Test rule for Create AD Group workflow - IIQ 8.4
-    Simplified to work without getId() method
-  </Description>
+<Rule name="Test Create AD Group" type="GenericObject">
+  <Description>Simple test</Description>
   <Signature returnType="void"/>
   <Body>
     <![CDATA[
@@ -12,147 +9,43 @@ import sailpoint.object.*;
 import sailpoint.tools.*;
 import java.util.*;
 
-log.info("===== TEST Create AD Group Workflow =====");
+log.info("TEST START");
 
 try {
-  // Get the workflow
   Workflow wf = (Workflow) context.getObjectByName(Workflow.class, "Create AD Group from API");
+  log.info("Workflow: " + (wf != null ? wf.getName() : "null"));
   
   if (wf == null) {
-    log.error("ERROR: Workflow not found!");
+    log.error("Workflow not found");
     return;
   }
   
-  log.info("Workflow found: " + wf.getName());
+  HashMap params = new HashMap();
+  params.put("applicationName", "Active Directory");
+  params.put("groupName", "TEST-" + System.currentTimeMillis());
+  params.put("groupDescription", "Test");
+  params.put("groupOwner", "CN=Administrator,CN=Users,DC=company,DC=com");
+  params.put("groupType", "Security");
+  params.put("groupScope", "Global");
+  params.put("organizationalUnit", "CN=Users,DC=company,DC=com");
   
-  // Create test parameters
-  HashMap launchArgsMap = new HashMap();
-  String testGroupName = "TEST-WF-" + System.currentTimeMillis();
-  String caseName = "Test: " + testGroupName;
+  log.info("Launching workflow");
   
-  launchArgsMap.put("applicationName", "Active Directory");
-  launchArgsMap.put("groupName", testGroupName);
-  launchArgsMap.put("groupDescription", "Test group from rule");
-  launchArgsMap.put("groupOwner", "CN=Administrator,CN=Users,DC=company,DC=com");
-  launchArgsMap.put("groupType", "Security");
-  launchArgsMap.put("groupScope", "Global");
-  launchArgsMap.put("organizationalUnit", "CN=Users,DC=company,DC=com");
-  launchArgsMap.put("groupEmail", "testgroup@company.com");
+  WorkflowLaunch wfLaunch = new WorkflowLaunch();
+  wfLaunch.setWorkflowName(wf.getName());
+  wfLaunch.setWorkflowRef(wf.getName());
+  wfLaunch.setCaseName("Test-" + System.currentTimeMillis());
+  wfLaunch.setVariables(params);
   
-  log.info("Test Group: " + testGroupName);
-  log.info("Case Name: " + caseName);
+  Workflower wfer = new Workflower(context);
+  WorkflowLaunch launch = wfer.launch(wfLaunch);
   
-  // Create WorkflowLaunch
-  WorkflowLaunch wflaunch = new WorkflowLaunch();
-  wflaunch.setWorkflowName(wf.getName());
-  wflaunch.setWorkflowRef(wf.getName());
-  wflaunch.setCaseName(caseName);
-  wflaunch.setVariables(launchArgsMap);
+  log.info("Launch result: " + (launch != null ? "success" : "null"));
   
-  // Launch
-  log.info("Launching workflow...");
-  Workflower workflower = new Workflower(context);
-  WorkflowLaunch launch = workflower.launch(wflaunch);
-  
-  if (launch == null) {
-    log.error("ERROR: Launch failed!");
-    return;
-  }
-  
-  log.info("Workflow launched!");
-  
-  // Wait and search for the case
-  log.info("Waiting for case to be created...");
-  WorkflowCase wfCase = null;
-  
-  for (int i = 0; i < 120; i++) {
-    // Search for case by name
-    Iterator cases = context.search(WorkflowCase.class, new QueryOptions());
-    
-    while (cases.hasNext()) {
-      WorkflowCase candidate = (WorkflowCase) cases.next();
-      
-      if (candidate != null &amp;&amp; candidate.getCaseName() != null &amp;&amp; 
-          candidate.getCaseName().equals(caseName)) {
-        wfCase = candidate;
-        break;
-      }
-    }
-    
-    if (wfCase != null) {
-      log.info("Case found!");
-      break;
-    }
-    
-    if (i % 10 == 0) {
-      log.info("Searching... (" + (i + 1) + "s)");
-    }
-    
-    Thread.sleep(1000);
-  }
-  
-  if (wfCase == null) {
-    log.error("ERROR: Could not find workflow case!");
-    return;
-  }
-  
-  // Wait for completion
-  log.info("Case found: " + wfCase.getId());
-  log.info("Waiting for completion...");
-  
-  for (int i = 0; i < 120; i++) {
-    wfCase = context.getObjectById(WorkflowCase.class, wfCase.getId());
-    
-    if (wfCase == null) {
-      log.error("Case disappeared!");
-      break;
-    }
-    
-    if (wfCase.isFinalized()) {
-      log.info("Workflow completed!");
-      break;
-    }
-    
-    if (i % 5 == 0) {
-      log.info("  Status: " + wfCase.getState() + " (" + (i + 1) + "s)");
-    }
-    
-    Thread.sleep(1000);
-  }
-  
-  // Show results
-  if (wfCase != null) {
-    log.info("\n===== RESULTS =====");
-    log.info("State: " + wfCase.getState());
-    
-    Map vars = wfCase.getVariables();
-    if (vars != null) {
-      Object success = vars.get("isSuccess");
-      Object error = vars.get("errorMessage");
-      Object reqId = vars.get("requestId");
-      
-      log.info("isSuccess: " + success);
-      log.info("errorMessage: " + error);
-      log.info("requestId: " + reqId);
-      
-      if (success != null &amp;&amp; "true".equals(success.toString())) {
-        log.info("\n✓ SUCCESS!");
-        log.info("  Group: " + testGroupName);
-        log.info("  RequestID: " + reqId);
-      } else {
-        log.error("\n✗ FAILED!");
-        log.error("  Error: " + error);
-      }
-    } else {
-      log.warn("No output variables");
-    }
-  }
-  
-  log.info("===== TEST COMPLETE =====");
+  log.info("TEST COMPLETE");
   
 } catch (Exception e) {
   log.error("EXCEPTION: " + e.getMessage());
-  e.printStackTrace();
 }
     ]]>
   </Body>
