@@ -2,23 +2,6 @@
 <!DOCTYPE Workflow PUBLIC "sailpoint.dtd" "sailpoint.dtd">
 <Workflow name="Create AD Group from API" type="Subprocess">
   
-  <!-- 
-    Workflow: Create AD Group from API
-    Purpose: Creates an Active Directory group based on input parameters from an API call
-    Trigger: API call with required parameters
-    
-    Input Parameters:
-    - applicationName: Name of the application (String)
-    - groupName: Name of the AD group to create (String)
-    - groupDescription: Description of the group (String)
-    - groupOwner: Owner/manager of the group (String)
-    - groupType: Type of group (Security, Distribution) (String)
-    - groupScope: Scope of group (Global, Domain Local, Universal) (String)
-    - organizationalUnit: OU path where group will be created (String)
-    - groupEmail: Email address for the group (String, optional)
-    - additionalAttributes: JSON map of additional AD attributes (Map, optional)
-  -->
-
   <Variable name="applicationName" type="string"/>
   <Variable name="groupName" type="string"/>
   <Variable name="groupDescription" type="string"/>
@@ -29,357 +12,312 @@
   <Variable name="groupEmail" type="string"/>
   <Variable name="additionalAttributes" type="map"/>
   
-  <!-- Internal variables -->
   <Variable name="adApplication" type="object"/>
-  <Variable name="connectorProvisioning" type="object"/>
   <Variable name="requestId" type="string"/>
   <Variable name="workflowStartTime" type="date"/>
   <Variable name="errorMessage" type="string"/>
-  <Variable name="isSuccess" type="boolean"/>
+  <Variable name="isSuccess" type="boolean" initializer="true"/>
   <Variable name="auditLog" type="string"/>
   
   <Step name="Start" type="start">
     <Transition to="ValidateInput"/>
   </Step>
 
-  <!-- ====== VALIDATION STEP ====== -->
+  <!-- VALIDATION STEP -->
   <Step name="ValidateInput" type="script">
     <Script>
       <Source>
-        import sailpoint.object.*;
-        import sailpoint.tools.*;
-        import java.util.*;
+import sailpoint.object.*;
+import sailpoint.tools.*;
+import java.util.*;
 
-        // Log the start of workflow
-        workflowStartTime = new Date();
-        requestId = UUID.randomUUID().toString();
-        
-        log.info("=== Create AD Group Workflow Started ===");
-        log.info("Request ID: " + requestId);
-        log.info("Application Name: " + applicationName);
-        log.info("Group Name: " + groupName);
+workflowStartTime = new Date();
+requestId = UUID.randomUUID().toString();
 
-        // Validate required input parameters
-        List errors = new ArrayList();
+log.info("Create AD Group Workflow - Request ID: " + requestId);
 
-        if (null == applicationName || applicationName.trim().isEmpty()) {
-          errors.add("applicationName is required");
-        }
+// Check for empty values
+if (applicationName == null || applicationName.equals("")) {
+  errorMessage = "Error: applicationName is required";
+  isSuccess = false;
+  return;
+}
 
-        if (null == groupName || groupName.trim().isEmpty()) {
-          errors.add("groupName is required");
-        }
+if (groupName == null || groupName.equals("")) {
+  errorMessage = "Error: groupName is required";
+  isSuccess = false;
+  return;
+}
 
-        if (null == groupDescription || groupDescription.trim().isEmpty()) {
-          errors.add("groupDescription is required");
-        }
+if (groupDescription == null || groupDescription.equals("")) {
+  errorMessage = "Error: groupDescription is required";
+  isSuccess = false;
+  return;
+}
 
-        if (null == groupOwner || groupOwner.trim().isEmpty()) {
-          errors.add("groupOwner is required");
-        }
+if (groupOwner == null || groupOwner.equals("")) {
+  errorMessage = "Error: groupOwner is required";
+  isSuccess = false;
+  return;
+}
 
-        if (null == groupType || groupType.trim().isEmpty()) {
-          errors.add("groupType is required");
-        }
-        // Validate groupType values
-        else if (!groupType.equals("Security") &amp;&amp; !groupType.equals("Distribution")) {
-          errors.add("groupType must be either 'Security' or 'Distribution'");
-        }
+if (groupType == null || groupType.equals("")) {
+  errorMessage = "Error: groupType is required";
+  isSuccess = false;
+  return;
+}
 
-        if (null == groupScope || groupScope.trim().isEmpty()) {
-          errors.add("groupScope is required");
-        }
-        // Validate groupScope values
-        else if (!groupScope.equals("Global") &amp;&amp; !groupScope.equals("Domain Local") &amp;&amp; !groupScope.equals("Universal")) {
-          errors.add("groupScope must be 'Global', 'Domain Local', or 'Universal'");
-        }
+if (groupScope == null || groupScope.equals("")) {
+  errorMessage = "Error: groupScope is required";
+  isSuccess = false;
+  return;
+}
 
-        if (null == organizationalUnit || organizationalUnit.trim().isEmpty()) {
-          errors.add("organizationalUnit is required");
-        }
+if (organizationalUnit == null || organizationalUnit.equals("")) {
+  errorMessage = "Error: organizationalUnit is required";
+  isSuccess = false;
+  return;
+}
 
-        if (errors.size() > 0) {
-          errorMessage = "Validation Failed: " + errors.toString();
-          isSuccess = false;
-          log.error(errorMessage);
-          workflow.put("validationErrors", errors);
-          return false;
-        }
-
-        isSuccess = true;
-        log.info("All validations passed");
-        return true;
+log.info("Validation passed for group: " + groupName);
+isSuccess = true;
       </Source>
     </Script>
-    <Transition to="ValidateInput" test="!isSuccess">
-      <Arg name="processMsg" value="Input validation failed"/>
-    </Transition>
+    <Transition to="HandleError" test="!isSuccess"/>
     <Transition to="GetADApplication" test="isSuccess"/>
   </Step>
 
-  <!-- ====== GET AD APPLICATION ====== -->
+  <!-- GET AD APPLICATION -->
   <Step name="GetADApplication" type="script">
     <Script>
       <Source>
-        import sailpoint.object.*;
-        import sailpoint.tools.*;
+import sailpoint.object.*;
 
-        log.info("Retrieving Active Directory application: " + applicationName);
+log.info("Retrieving AD application: " + applicationName);
 
-        // Get the AD application object
-        adApplication = context.getObjectByName(Application.class, applicationName);
+adApplication = context.getObjectByName(Application.class, applicationName);
 
-        if (null == adApplication) {
-          errorMessage = "Active Directory application not found: " + applicationName;
-          isSuccess = false;
-          log.error(errorMessage);
-          return false;
-        }
-
-        log.info("AD Application found successfully");
-        log.info("Application Key: " + adApplication.getName());
-        
-        isSuccess = true;
-        return true;
+if (adApplication == null) {
+  errorMessage = "Error: AD application not found - " + applicationName;
+  isSuccess = false;
+  log.error(errorMessage);
+} else {
+  log.info("Found AD application: " + adApplication.getName());
+  isSuccess = true;
+}
       </Source>
     </Script>
-    <Transition to="GetADApplication" test="!isSuccess">
-      <Arg name="processMsg" value="Failed to retrieve AD application"/>
-    </Transition>
-    <Transition to="BuildProvisioningPlan" test="isSuccess"/>
+    <Transition to="HandleError" test="!isSuccess"/>
+    <Transition to="BuildGroupAttributes" test="isSuccess"/>
   </Step>
 
-  <!-- ====== BUILD PROVISIONING PLAN ====== -->
-  <Step name="BuildProvisioningPlan" type="script">
+  <!-- BUILD GROUP ATTRIBUTES -->
+  <Step name="BuildGroupAttributes" type="script">
     <Script>
       <Source>
-        import sailpoint.object.*;
-        import sailpoint.tools.*;
-        import sailpoint.connector.*;
-        import java.util.*;
+import sailpoint.object.*;
+import java.util.*;
 
-        log.info("Building provisioning plan for group creation");
+log.info("Building group attributes");
 
-        try {
-          // Create a new ProvisioningPlan
-          ProvisioningPlan plan = new ProvisioningPlan();
-          plan.setComments("Create AD Group - API Request ID: " + requestId);
-
-          // Create account request for group creation
-          ProvisioningPlan.AccountRequest acctReq = new ProvisioningPlan.AccountRequest(ProvisioningPlan.AccountRequest.Type.Create, applicationName, null, null);
-
-          // Add the primary group attributes
-          Map attributes = new HashMap();
-
-          // Set group name
-          attributes.put("sAMAccountName", groupName);
-          
-          // Set group display name
-          attributes.put("cn", groupName);
-          attributes.put("displayName", groupName);
-
-          // Set description
-          attributes.put("description", groupDescription);
-
-          // Set group type
-          if ("Security".equals(groupType)) {
-            attributes.put("groupType", "-2147483646"); // ADS_GROUP_TYPE_SECURITY_ENABLED
-          } else if ("Distribution".equals(groupType)) {
-            attributes.put("groupType", "2"); // ADS_GROUP_TYPE_UNIVERSAL_GROUP
-          }
-
-          // Set group scope
-          attributes.put("groupScope", groupScope);
-
-          // Set organizational unit
-          attributes.put("ou", organizationalUnit);
-
-          // Set managed by (owner)
-          attributes.put("managedBy", groupOwner);
-
-          // Set group email if provided
-          if (null != groupEmail &amp;&amp; !groupEmail.trim().isEmpty()) {
-            attributes.put("mail", groupEmail);
-          }
-
-          // Add additional attributes if provided
-          if (null != additionalAttributes &amp;&amp; additionalAttributes.size() > 0) {
-            attributes.putAll(additionalAttributes);
-            log.info("Added " + additionalAttributes.size() + " additional attributes");
-          }
-
-          // Add attributes to account request
-          for (String attrName : attributes.keySet()) {
-            ProvisioningPlan.AttributeRequest attrReq = new ProvisioningPlan.AttributeRequest(attrName, ProvisioningPlan.Operation.Set, attributes.get(attrName));
-            acctReq.add(attrReq);
-            log.debug("Added attribute: " + attrName + " = " + attributes.get(attrName));
-          }
-
-          // Add account request to plan
-          plan.add(acctReq);
-
-          // Store the plan in workflow
-          workflow.put("provisioningPlan", plan);
-
-          log.info("Provisioning plan built successfully with " + attributes.size() + " attributes");
-          isSuccess = true;
-          return true;
-
-        } catch (Exception e) {
-          errorMessage = "Error building provisioning plan: " + e.getMessage();
-          isSuccess = false;
-          log.error(errorMessage, e);
-          return false;
-        }
+try {
+  Map groupAttrs = new HashMap();
+  
+  groupAttrs.put("sAMAccountName", groupName);
+  groupAttrs.put("cn", groupName);
+  groupAttrs.put("displayName", groupName);
+  groupAttrs.put("description", groupDescription);
+  groupAttrs.put("groupType", groupType);
+  groupAttrs.put("groupScope", groupScope);
+  groupAttrs.put("ou", organizationalUnit);
+  groupAttrs.put("managedBy", groupOwner);
+  
+  if (groupEmail != null && !groupEmail.equals("")) {
+    groupAttrs.put("mail", groupEmail);
+  }
+  
+  if (additionalAttributes != null && additionalAttributes.size() > 0) {
+    groupAttrs.putAll(additionalAttributes);
+    log.info("Added " + additionalAttributes.size() + " additional attributes");
+  }
+  
+  workflow.put("groupAttributes", groupAttrs);
+  log.info("Attributes built successfully");
+  isSuccess = true;
+  
+} catch (Exception e) {
+  errorMessage = "Error building attributes: " + e.getMessage();
+  isSuccess = false;
+  log.error(errorMessage);
+}
       </Source>
     </Script>
-    <Transition to="BuildProvisioningPlan" test="!isSuccess">
-      <Arg name="processMsg" value="Failed to build provisioning plan"/>
-    </Transition>
-    <Transition to="ExecuteProvisioning" test="isSuccess"/>
+    <Transition to="HandleError" test="!isSuccess"/>
+    <Transition to="ProvisionGroup" test="isSuccess"/>
   </Step>
 
-  <!-- ====== EXECUTE PROVISIONING ====== -->
-  <Step name="ExecuteProvisioning" type="script">
+  <!-- PROVISION GROUP -->
+  <Step name="ProvisionGroup" type="script">
     <Script>
       <Source>
-        import sailpoint.object.*;
-        import sailpoint.tools.*;
-        import sailpoint.connector.*;
-        import java.util.*;
+import sailpoint.object.*;
+import sailpoint.connector.*;
+import java.util.*;
 
-        log.info("Executing provisioning plan to create AD group");
+log.info("Creating provisioning plan and executing");
 
-        try {
-          ProvisioningPlan plan = (ProvisioningPlan) workflow.get("provisioningPlan");
-          
-          if (null == plan) {
-            errorMessage = "Provisioning plan not found in workflow";
-            isSuccess = false;
-            log.error(errorMessage);
-            return false;
-          }
-
-          // Get the connector for the AD application
-          Connector connector = adApplication.getConnector();
-          
-          if (null == connector) {
-            errorMessage = "Connector not found for application: " + applicationName;
-            isSuccess = false;
-            log.error(errorMessage);
-            return false;
-          }
-
-          // Execute the provisioning plan
-          connectorProvisioning = connector.provision(context, adApplication, plan);
-
-          if (null != connectorProvisioning) {
-            log.info("Provisioning executed successfully");
-            log.info("Provisioning result: " + connectorProvisioning.toString());
-            isSuccess = true;
-          } else {
-            errorMessage = "Provisioning returned null result";
-            isSuccess = false;
-            log.warn(errorMessage);
-          }
-
-          return isSuccess;
-
-        } catch (Exception e) {
-          errorMessage = "Error executing provisioning: " + e.getMessage();
-          isSuccess = false;
-          log.error(errorMessage, e);
-          return false;
-        }
+try {
+  Map groupAttrs = (Map) workflow.get("groupAttributes");
+  
+  if (groupAttrs == null) {
+    errorMessage = "Error: Group attributes not found";
+    isSuccess = false;
+    return;
+  }
+  
+  ProvisioningPlan plan = new ProvisioningPlan();
+  plan.setComments("API Request: " + requestId + " - Group: " + groupName);
+  
+  ProvisioningPlan.AccountRequest acctReq = new ProvisioningPlan.AccountRequest(
+    ProvisioningPlan.AccountRequest.Type.Create, 
+    applicationName, 
+    null, 
+    null
+  );
+  
+  for (Object key : groupAttrs.keySet()) {
+    String attrName = (String) key;
+    Object attrValue = groupAttrs.get(attrName);
+    
+    ProvisioningPlan.AttributeRequest attrReq = new ProvisioningPlan.AttributeRequest(
+      attrName, 
+      ProvisioningPlan.Operation.Set, 
+      attrValue
+    );
+    acctReq.add(attrReq);
+  }
+  
+  plan.add(acctReq);
+  
+  Connector connector = adApplication.getConnector();
+  if (connector == null) {
+    errorMessage = "Error: No connector found for application";
+    isSuccess = false;
+    return;
+  }
+  
+  Object provResult = connector.provision(context, adApplication, plan);
+  
+  if (provResult != null) {
+    log.info("Group provisioning completed successfully");
+    workflow.put("provisioningResult", provResult);
+    isSuccess = true;
+  } else {
+    log.warn("Provisioning returned null, but no exception was thrown");
+    isSuccess = true;
+  }
+  
+} catch (Exception e) {
+  errorMessage = "Error during provisioning: " + e.getMessage();
+  isSuccess = false;
+  log.error(errorMessage, e);
+}
       </Source>
     </Script>
-    <Transition to="ExecuteProvisioning" test="!isSuccess">
-      <Arg name="processMsg" value="Failed to execute provisioning"/>
-    </Transition>
-    <Transition to="LogAudit" test="isSuccess"/>
+    <Transition to="HandleError" test="!isSuccess"/>
+    <Transition to="CreateAuditLog" test="isSuccess"/>
   </Step>
 
-  <!-- ====== AUDIT LOGGING ====== -->
-  <Step name="LogAudit" type="script">
+  <!-- CREATE AUDIT LOG -->
+  <Step name="CreateAuditLog" type="script">
     <Script>
       <Source>
-        import sailpoint.object.*;
-        import sailpoint.tools.*;
-        import java.util.*;
-        import java.text.*;
+import sailpoint.object.*;
+import java.util.*;
 
-        log.info("Creating audit log entry");
+log.info("Creating audit log entry");
 
-        try {
-          String status = isSuccess ? "SUCCESS" : "FAILED";
-          Date endTime = new Date();
-          long duration = endTime.getTime() - workflowStartTime.getTime();
-
-          auditLog = "Request ID: " + requestId + " | " +
-                     "Status: " + status + " | " +
-                     "Application: " + applicationName + " | " +
-                     "Group Name: " + groupName + " | " +
-                     "Owner: " + groupOwner + " | " +
-                     "Duration: " + duration + "ms";
-
-          // Create audit entry
-          AuditEvent event = new AuditEvent();
-          event.setAction("CreateADGroup");
-          event.setSource("CreateADGroupWorkflow");
-          event.setInterface("API");
-          event.setStatus(status);
-          event.setComment(auditLog);
-          event.setAttributes(new HashMap());
-          event.getAttributes().put("requestId", requestId);
-          event.getAttributes().put("applicationName", applicationName);
-          event.getAttributes().put("groupName", groupName);
-          event.getAttributes().put("groupOwner", groupOwner);
-          event.getAttributes().put("duration", String.valueOf(duration));
-
-          // Save audit event
-          context.saveObject(event);
-          context.commitTransaction();
-
-          log.info("Audit log created successfully");
-          log.info(auditLog);
-
-        } catch (Exception e) {
-          log.error("Error creating audit log: " + e.getMessage(), e);
-        }
-      </Source>
-    </Script>
-    <Transition to="End" test="isSuccess"/>
-    <Transition to="HandleError"/>
-  </Step>
-
-  <!-- ====== ERROR HANDLING ====== -->
-  <Step name="HandleError" type="script">
-    <Script>
-      <Source>
-        import sailpoint.object.*;
-        import sailpoint.tools.*;
-
-        log.error("=== Workflow encountered error ===");
-        log.error("Error Message: " + errorMessage);
-        log.error("Request ID: " + requestId);
-
-        // You can add additional error handling here such as:
-        // - Sending notifications
-        // - Creating tickets
-        // - Rolling back changes
-
-        workflow.put("error", errorMessage);
-        workflow.put("isSuccess", isSuccess);
+try {
+  Date endTime = new Date();
+  long duration = endTime.getTime() - workflowStartTime.getTime();
+  
+  auditLog = "Group Created - Name: " + groupName + 
+             " | Owner: " + groupOwner + 
+             " | Duration: " + duration + "ms | RequestID: " + requestId;
+  
+  AuditEvent event = new AuditEvent();
+  event.setAction("CreateADGroup");
+  event.setSource("API");
+  event.setInterface("Workflow");
+  event.setStatus(isSuccess ? "SUCCESS" : "FAILED");
+  event.setComment(auditLog);
+  
+  Map attrs = new HashMap();
+  attrs.put("requestId", requestId);
+  attrs.put("applicationName", applicationName);
+  attrs.put("groupName", groupName);
+  attrs.put("groupOwner", groupOwner);
+  event.setAttributes(attrs);
+  
+  context.saveObject(event);
+  context.commitTransaction();
+  
+  log.info("Audit entry created");
+  isSuccess = true;
+  
+} catch (Exception e) {
+  log.error("Error creating audit log: " + e.getMessage());
+  isSuccess = true;
+}
       </Source>
     </Script>
     <Transition to="End"/>
   </Step>
 
-  <!-- ====== END STEP ====== -->
+  <!-- ERROR HANDLER -->
+  <Step name="HandleError" type="script">
+    <Script>
+      <Source>
+import sailpoint.object.*;
+
+log.error("Workflow error - RequestID: " + requestId);
+log.error("Error message: " + errorMessage);
+
+try {
+  Date endTime = new Date();
+  long duration = endTime.getTime() - workflowStartTime.getTime();
+  
+  AuditEvent event = new AuditEvent();
+  event.setAction("CreateADGroup");
+  event.setSource("API");
+  event.setInterface("Workflow");
+  event.setStatus("FAILED");
+  event.setComment(errorMessage + " | Duration: " + duration + "ms | RequestID: " + requestId);
+  
+  Map attrs = new HashMap();
+  attrs.put("requestId", requestId);
+  attrs.put("error", errorMessage);
+  event.setAttributes(attrs);
+  
+  context.saveObject(event);
+  context.commitTransaction();
+  
+} catch (Exception e) {
+  log.error("Error logging failure: " + e.getMessage());
+}
+
+isSuccess = false;
+      </Source>
+    </Script>
+    <Transition to="End"/>
+  </Step>
+
+  <!-- END STEP -->
   <Step name="End" type="end">
     <Arg name="requestId" value="ref:requestId"/>
     <Arg name="isSuccess" value="ref:isSuccess"/>
     <Arg name="errorMessage" value="ref:errorMessage"/>
+    <Arg name="auditLog" value="ref:auditLog"/>
   </Step>
 
 </Workflow>
