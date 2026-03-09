@@ -25,7 +25,6 @@
 <Source>
 import sailpoint.object.*;
 import sailpoint.tools.*;
-import sailpoint.connector.*;
 import java.util.*;
 
 log.info("===== Create AD Group =====");
@@ -48,37 +47,14 @@ try {
   
   log.info("Application found");
   
-  // In IIQ 8.4, getConnector() returns a String (the connector class name)
-  // We need to use ConnectorFactory to get the actual connector instance
-  String connectorClass = app.getConnector();
-  log.info("Connector class: " + connectorClass);
-  
-  if (connectorClass == null || connectorClass.isEmpty()) {
-    log.error("No connector configured for application");
-    isSuccess = false;
-    errorMessage = "No connector configured";
-    return;
-  }
-  
-  // Get the actual connector instance using ConnectorFactory
-  ConnectorFactory factory = ConnectorFactory.getConnectorFactory();
-  Connector connector = factory.getConnector(app, context);
-  
-  if (connector == null) {
-    log.error("Could not instantiate connector");
-    isSuccess = false;
-    errorMessage = "Could not instantiate connector";
-    return;
-  }
-  
-  log.info("Connector instantiated: " + connector.getClass().getName());
-  
   // Create provisioning plan
   ProvisioningPlan plan = new ProvisioningPlan();
+  log.info("Plan created");
   
   // Create account request
   ProvisioningPlan.AccountRequest acctReq = new ProvisioningPlan.AccountRequest();
   acctReq.setApplication(applicationName);
+  log.info("AccountRequest created");
   
   // Add attributes
   ProvisioningPlan.AttributeRequest attr1 = new ProvisioningPlan.AttributeRequest();
@@ -152,22 +128,19 @@ try {
   
   plan.add(acctReq);
   
-  log.info("Plan created with attributes, executing...");
+  log.info("Attributes added to plan");
+  log.info("Executing provisioning...");
   
-  // Execute provisioning
-  Object result = connector.provision(context, app, plan);
+  // In IIQ 8.4, just call provision directly on the application
+  // The application handles the connector internally
+  Object result = app.provision(context, plan);
   
-  log.info("Provisioning completed");
+  log.info("Provisioning executed");
   log.info("Result: " + (result != null ? result.toString() : "null"));
   
   isSuccess = true;
   errorMessage = null;
   log.info("SUCCESS: Group created!");
-  
-} catch (ClassCastException cce) {
-  log.error("ClassCastException: " + cce.getMessage());
-  isSuccess = false;
-  errorMessage = "Cast error: " + cce.getMessage();
   
 } catch (Exception e) {
   log.error("Exception: " + e.getClass().getName());
