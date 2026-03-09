@@ -19,11 +19,11 @@
 <Variable name="isSuccess" type="boolean"/>
 <Variable name="auditLog" type="string"/>
 
-<Step name="Start" type="start">
+<Step name="Start">
 <Transition to="ValidateInput"/>
 </Step>
 
-<Step name="ValidateInput" type="script">
+<Step name="ValidateInput">
 <Script>
 <Source>
 import sailpoint.object.*;
@@ -67,11 +67,15 @@ isSuccess = true;
 return true;
 </Source>
 </Script>
-<Transition to="HandleError" test="!isSuccess"/>
-<Transition to="GetADApplication" test="isSuccess"/>
+<Transition to="GetADApplication">
+<Arg name="test" value="isSuccess"/>
+</Transition>
+<Transition to="HandleError">
+<Arg name="test" value="!isSuccess"/>
+</Transition>
 </Step>
 
-<Step name="GetADApplication" type="script">
+<Step name="GetADApplication">
 <Script>
 <Source>
 log.info("Getting AD application: " + applicationName);
@@ -85,11 +89,15 @@ isSuccess = true;
 return true;
 </Source>
 </Script>
-<Transition to="HandleError" test="!isSuccess"/>
-<Transition to="BuildPlan" test="isSuccess"/>
+<Transition to="BuildPlan">
+<Arg name="test" value="isSuccess"/>
+</Transition>
+<Transition to="HandleError">
+<Arg name="test" value="!isSuccess"/>
+</Transition>
 </Step>
 
-<Step name="BuildPlan" type="script">
+<Step name="BuildPlan">
 <Script>
 <Source>
 import sailpoint.object.*;
@@ -134,11 +142,15 @@ try {
 }
 </Source>
 </Script>
-<Transition to="HandleError" test="!isSuccess"/>
-<Transition to="ExecutePlan" test="isSuccess"/>
+<Transition to="ExecutePlan">
+<Arg name="test" value="isSuccess"/>
+</Transition>
+<Transition to="HandleError">
+<Arg name="test" value="!isSuccess"/>
+</Transition>
 </Step>
 
-<Step name="ExecutePlan" type="script">
+<Step name="ExecutePlan">
 <Script>
 <Source>
 import sailpoint.object.*;
@@ -170,11 +182,15 @@ try {
 }
 </Source>
 </Script>
-<Transition to="HandleError" test="!isSuccess"/>
-<Transition to="Audit" test="isSuccess"/>
+<Transition to="Audit">
+<Arg name="test" value="isSuccess"/>
+</Transition>
+<Transition to="HandleError">
+<Arg name="test" value="!isSuccess"/>
+</Transition>
 </Step>
 
-<Step name="Audit" type="script">
+<Step name="Audit">
 <Script>
 <Source>
 import sailpoint.object.*;
@@ -206,7 +222,7 @@ try {
 <Transition to="Success"/>
 </Step>
 
-<Step name="HandleError" type="script">
+<Step name="HandleError">
 <Script>
 <Source>
 import sailpoint.object.*;
@@ -235,16 +251,8 @@ try {
 <Transition to="Failure"/>
 </Step>
 
-<Step name="Success" type="end">
-<Arg name="requestId" value="ref:requestId"/>
-<Arg name="isSuccess" value="ref:isSuccess"/>
-<Arg name="errorMessage" value="ref:errorMessage"/>
-</Step>
+<Step name="Success"/>
 
-<Step name="Failure" type="end">
-<Arg name="requestId" value="ref:requestId"/>
-<Arg name="isSuccess" value="ref:isSuccess"/>
-<Arg name="errorMessage" value="ref:errorMessage"/>
-</Step>
+<Step name="Failure"/>
 
 </Workflow>
