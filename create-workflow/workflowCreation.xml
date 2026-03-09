@@ -25,6 +25,7 @@
 <Source>
 import sailpoint.object.*;
 import sailpoint.tools.*;
+import sailpoint.connector.*;
 import java.util.*;
 
 log.info("===== Create AD Group =====");
@@ -35,7 +36,7 @@ log.info("GroupName: " + groupName);
 log.info("ApplicationName: " + applicationName);
 
 try {
-  // Get the AD application
+  log.info("Step 1: Get Application");
   Application app = context.getObjectByName(Application.class, applicationName);
   
   if (app == null) {
@@ -47,16 +48,27 @@ try {
   
   log.info("Application found");
   
-  // Create provisioning plan
-  ProvisioningPlan plan = new ProvisioningPlan();
-  log.info("Plan created");
+  log.info("Step 2: Get Connector using ConnectorFactory");
+  Connector connector = ConnectorFactory.getConnector(app, null);
   
-  // Create account request
+  if (connector == null) {
+    log.error("Could not get connector");
+    isSuccess = false;
+    errorMessage = "Could not instantiate connector";
+    return;
+  }
+  
+  log.info("Connector obtained: " + connector.getClass().getName());
+  
+  log.info("Step 3: Create Provisioning Plan");
+  ProvisioningPlan plan = new ProvisioningPlan();
+  
+  log.info("Step 4: Create Account Request");
   ProvisioningPlan.AccountRequest acctReq = new ProvisioningPlan.AccountRequest();
   acctReq.setApplication(applicationName);
-  log.info("AccountRequest created");
   
-  // Add attributes
+  log.info("Step 5: Add Attributes");
+  
   ProvisioningPlan.AttributeRequest attr1 = new ProvisioningPlan.AttributeRequest();
   attr1.setName("sAMAccountName");
   attr1.setValue(groupName);
@@ -128,22 +140,17 @@ try {
   
   plan.add(acctReq);
   
-  log.info("Attributes added to plan");
-  log.info("Executing provisioning...");
+  log.info("Step 6: Execute Provisioning via Connector");
+  Object result = connector.provision(context, app, plan);
   
-  // In IIQ 8.4, just call provision directly on the application
-  // The application handles the connector internally
-  Object result = app.provision(context, plan);
-  
-  log.info("Provisioning executed");
-  log.info("Result: " + (result != null ? result.toString() : "null"));
+  log.info("Provisioning result: " + (result != null ? result.toString() : "null"));
   
   isSuccess = true;
   errorMessage = null;
   log.info("SUCCESS: Group created!");
   
 } catch (Exception e) {
-  log.error("Exception: " + e.getClass().getName());
+  log.error("EXCEPTION: " + e.getClass().getName());
   log.error("Message: " + e.getMessage());
   isSuccess = false;
   errorMessage = e.getMessage();
@@ -153,7 +160,7 @@ try {
   }
 }
 
-log.info("Result: isSuccess=" + isSuccess + ", error=" + errorMessage);
+log.info("Final Result: isSuccess=" + isSuccess + ", error=" + errorMessage);
 </Source>
 </Script>
 <Transition to="End"/>
