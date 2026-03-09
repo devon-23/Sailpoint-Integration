@@ -1,170 +1,133 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
 <!DOCTYPE Workflow PUBLIC "sailpoint.dtd" "sailpoint.dtd">
-<Workflow name="Create AD Group from API" type="Subprocess">
 
-<Variable name="applicationName" type="string"/>
-<Variable name="groupName" type="string"/>
-<Variable name="groupDescription" type="string"/>
-<Variable name="groupOwner" type="string"/>
-<Variable name="groupType" type="string"/>
-<Variable name="groupScope" type="string"/>
-<Variable name="organizationalUnit" type="string"/>
-<Variable name="groupEmail" type="string"/>
-<Variable name="additionalAttributes" type="map"/>
+<Workflow name="CreateADGroupWorkflow" type="Generic">
 
-<Variable name="isSuccess" type="boolean"/>
-<Variable name="errorMessage" type="string"/>
-<Variable name="requestId" type="string"/>
+  <!-- ===================== -->
+  <!-- INPUT VARIABLES -->
+  <!-- ===================== -->
 
-<Step name="Start">
-<Transition to="CreateGroup"/>
-</Step>
+  <Variable name="applicationName" input="true" required="true"/>
+  <Variable name="groupName" input="true" required="true"/>
+  <Variable name="description" input="true"/>
+  <Variable name="owner" input="true"/>
+  <Variable name="requester" input="true"/>
+  <Variable name="result" output="true"/>
 
-<Step name="CreateGroup">
-<Script>
-<Source>
-import sailpoint.object.*;
-import sailpoint.tools.*;
-import sailpoint.request.*;
-import java.util.*;
+  <!-- ===================== -->
+  <!-- START -->
+  <!-- ===================== -->
 
-log.info("===== Create AD Group =====");
+  <Start name="Start" to="Validate Inputs"/>
 
-requestId = UUID.randomUUID().toString();
-log.info("RequestID: " + requestId);
-log.info("GroupName: " + groupName);
+  <!-- ===================== -->
+  <!-- VALIDATE INPUTS -->
+  <!-- ===================== -->
 
-try {
-  log.info("Step 1: Get Application");
-  Application app = context.getObjectByName(Application.class, applicationName);
-  
-  if (app == null) {
-    log.error("Application not found");
-    isSuccess = false;
-    errorMessage = "Application not found";
-    return;
-  }
-  
-  log.info("Application found");
-  
-  log.info("Step 2: Create Request Definition");
-  RequestDefinition reqDef = new RequestDefinition();
-  reqDef.setApplication(app);
-  
-  log.info("Step 3: Create Account Request");
-  ProvisioningPlan.AccountRequest acctReq = new ProvisioningPlan.AccountRequest();
-  acctReq.setApplication(applicationName);
-  
-  log.info("Step 4: Add Attributes");
-  
-  ProvisioningPlan.AttributeRequest attr1 = new ProvisioningPlan.AttributeRequest();
-  attr1.setName("sAMAccountName");
-  attr1.setValue(groupName);
-  attr1.setOperation(ProvisioningPlan.Operation.Set);
-  acctReq.add(attr1);
-  
-  ProvisioningPlan.AttributeRequest attr2 = new ProvisioningPlan.AttributeRequest();
-  attr2.setName("cn");
-  attr2.setValue(groupName);
-  attr2.setOperation(ProvisioningPlan.Operation.Set);
-  acctReq.add(attr2);
-  
-  ProvisioningPlan.AttributeRequest attr3 = new ProvisioningPlan.AttributeRequest();
-  attr3.setName("displayName");
-  attr3.setValue(groupName);
-  attr3.setOperation(ProvisioningPlan.Operation.Set);
-  acctReq.add(attr3);
-  
-  ProvisioningPlan.AttributeRequest attr4 = new ProvisioningPlan.AttributeRequest();
-  attr4.setName("description");
-  attr4.setValue(groupDescription);
-  attr4.setOperation(ProvisioningPlan.Operation.Set);
-  acctReq.add(attr4);
-  
-  ProvisioningPlan.AttributeRequest attr5 = new ProvisioningPlan.AttributeRequest();
-  attr5.setName("groupType");
-  attr5.setValue(groupType);
-  attr5.setOperation(ProvisioningPlan.Operation.Set);
-  acctReq.add(attr5);
-  
-  ProvisioningPlan.AttributeRequest attr6 = new ProvisioningPlan.AttributeRequest();
-  attr6.setName("groupScope");
-  attr6.setValue(groupScope);
-  attr6.setOperation(ProvisioningPlan.Operation.Set);
-  acctReq.add(attr6);
-  
-  ProvisioningPlan.AttributeRequest attr7 = new ProvisioningPlan.AttributeRequest();
-  attr7.setName("ou");
-  attr7.setValue(organizationalUnit);
-  attr7.setOperation(ProvisioningPlan.Operation.Set);
-  acctReq.add(attr7);
-  
-  ProvisioningPlan.AttributeRequest attr8 = new ProvisioningPlan.AttributeRequest();
-  attr8.setName("managedBy");
-  attr8.setValue(groupOwner);
-  attr8.setOperation(ProvisioningPlan.Operation.Set);
-  acctReq.add(attr8);
-  
-  if (groupEmail != null &amp;&amp; groupEmail.length() > 0) {
-    ProvisioningPlan.AttributeRequest attrEmail = new ProvisioningPlan.AttributeRequest();
-    attrEmail.setName("mail");
-    attrEmail.setValue(groupEmail);
-    attrEmail.setOperation(ProvisioningPlan.Operation.Set);
-    acctReq.add(attrEmail);
-  }
-  
-  if (additionalAttributes != null &amp;&amp; additionalAttributes.size() > 0) {
-    for (Object key : additionalAttributes.keySet()) {
-      String attrName = (String) key;
-      Object attrValue = additionalAttributes.get(attrName);
-      
-      ProvisioningPlan.AttributeRequest attrCustom = new ProvisioningPlan.AttributeRequest();
-      attrCustom.setName(attrName);
-      attrCustom.setValue(attrValue);
-      attrCustom.setOperation(ProvisioningPlan.Operation.Set);
-      acctReq.add(attrCustom);
-    }
-  }
-  
-  reqDef.setAccountRequest(acctReq);
-  
-  log.info("Step 5: Submit Request");
-  
-  // Use RequestManager to submit the request
-  RequestManager rm = new RequestManager(context);
-  Request request = rm.submitRequest(reqDef);
-  
-  if (request == null) {
-    log.error("Request submission returned null");
-    isSuccess = false;
-    errorMessage = "Request submission failed";
-    return;
-  }
-  
-  log.info("Request submitted: " + request.getId());
-  
-  isSuccess = true;
-  errorMessage = null;
-  log.info("SUCCESS: Request submitted!");
-  
-} catch (Exception e) {
-  log.error("EXCEPTION: " + e.getClass().getName());
-  log.error("Message: " + e.getMessage());
-  isSuccess = false;
-  errorMessage = e.getMessage();
-  
-  StackTraceElement[] st = e.getStackTrace();
-  if (st != null &amp;&amp; st.length > 0) {
-    log.error("Line: " + st[0].getLineNumber() + " in " + st[0].getMethodName());
-  }
-}
+  <Step name="Validate Inputs" to="Check Existing Entitlement">
+    <Script>
+      if (groupName == null || groupName.trim().length() == 0) {
+        throw new GeneralException("Group name is required");
+      }
 
-log.info("Final: isSuccess=" + isSuccess + ", error=" + errorMessage);
-</Source>
-</Script>
-<Transition to="End"/>
-</Step>
+      if (applicationName == null || applicationName.trim().length() == 0) {
+        throw new GeneralException("Application name is required");
+      }
+    </Script>
+  </Step>
 
-<Step name="End"/>
+  <!-- ===================== -->
+  <!-- CHECK IF GROUP EXISTS -->
+  <!-- ===================== -->
+
+  <Step name="Check Existing Entitlement" resultVariable="existingGroup" to="Create Entitlement">
+    <Script>
+      import sailpoint.object.ManagedAttribute;
+
+      ManagedAttribute existing =
+        context.getObjectByName(ManagedAttribute.class, groupName);
+
+      return existing;
+    </Script>
+
+    <Transition to="Fail - Already Exists" when="existingGroup != null"/>
+  </Step>
+
+  <!-- ===================== -->
+  <!-- CREATE ENTITLEMENT -->
+  <!-- ===================== -->
+
+  <Step name="Create Entitlement" to="Commit Changes">
+
+    <Script>
+
+      import sailpoint.object.Application;
+      import sailpoint.object.ManagedAttribute;
+      import sailpoint.object.Identity;
+
+      Application app =
+        context.getObjectByName(Application.class, applicationName);
+
+      if (app == null) {
+        throw new GeneralException("Application not found: " + applicationName);
+      }
+
+      ManagedAttribute group = new ManagedAttribute();
+
+      group.setApplication(app);
+      group.setValue(groupName);
+      group.setDisplayName(groupName);
+      group.setAttribute("description", description);
+
+      if (owner != null) {
+        Identity ownerIdentity =
+          context.getObjectByName(Identity.class, owner);
+
+        if (ownerIdentity != null) {
+          group.setOwner(ownerIdentity);
+        }
+      }
+
+      context.saveObject(group);
+
+      result = "Group created successfully: " + groupName;
+
+    </Script>
+
+  </Step>
+
+  <!-- ===================== -->
+  <!-- COMMIT -->
+  <!-- ===================== -->
+
+  <Step name="Commit Changes" to="Success">
+
+    <Script>
+      context.commitTransaction();
+    </Script>
+
+  </Step>
+
+  <!-- ===================== -->
+  <!-- SUCCESS -->
+  <!-- ===================== -->
+
+  <Step name="Success" icon="Task" posX="600" posY="200">
+    <Script>
+      log.info("CreateADGroupWorkflow completed successfully.");
+    </Script>
+  </Step>
+
+  <!-- ===================== -->
+  <!-- FAILURE -->
+  <!-- ===================== -->
+
+  <Step name="Fail - Already Exists" icon="Stop">
+
+    <Script>
+      throw new GeneralException("Group already exists: " + groupName);
+    </Script>
+
+  </Step>
 
 </Workflow>
