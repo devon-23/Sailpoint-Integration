@@ -1,67 +1,165 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
 <!DOCTYPE Rule PUBLIC "sailpoint.dtd" "sailpoint.dtd">
+<Rule language="beanshell" name="TestRule_WF_CreateADGroup">
+  <Description>
+    Test rule for WF_CreateADGroup workflow. Launches the workflow directly from
+    the IIQ Rules console with configurable test parameters. Prints step-by-step
+    output and the final task result so you can validate provisioning behavior
+    without needing an external API caller.
 
-<Rule name="Test-Launch-CreateADGroupWorkflow" type="Generic">
-  <Description>Launch CreateADGroupWorkflow for testing</Description>
+    Usage:
+      1. Import this rule via Global Settings > Import from File
+      2. Open Debug > Rules Console
+      3. Select "TestRule_WF_CreateADGroup" and click Run
+      4. Check the output panel for results
+  </Description>
 
   <Source>
+    import sailpoint.api.WorkflowSession;
+    import sailpoint.api.WorkflowLaunchService;
+    import sailpoint.object.TaskResult;
+    import sailpoint.object.WorkflowLaunch;
+    import sailpoint.object.Workflow;
+    import sailpoint.object.Identity;
+    import java.util.HashMap;
+    import java.util.Map;
 
-import sailpoint.object.Workflow;
-import sailpoint.object.WorkflowLaunch;
-import sailpoint.api.Workflower;
-import java.util.HashMap;
+    // ================================================================
+    // TEST PARAMETERS â edit these before running
+    // ================================================================
+    String TEST_APP_NAME        = "Active Directory";          // Must match your AD source name in IIQ exactly
+    String TEST_GROUP_NAME      = "GRP_Test_CreateADGroup";    // Group to be created
+    String TEST_GROUP_BASE_DN   = "OU=TestGroups,OU=Security,DC=corp,DC=example,DC=com"; // Target OU
+    String TEST_GROUP_DESC      = "Test group created by IIQ workflow rule test";
+    String TEST_FIS_OWNERS      = "jsmith,adoe";               // Comma-separated; leave "" to skip
+    boolean WAIT_FOR_COMPLETION = true;                        // true = block until workflow finishes
+    int     TIMEOUT_SECONDS     = 120;                         // Max wait time if blocking
+    // ================================================================
 
-/* -------------------------
-   TEST INPUT VALUES
-------------------------- */
+    System.out.println("=================================================");
+    System.out.println(" WF_CreateADGroup â Test Rule Starting");
+    System.out.println("=================================================");
+    System.out.println("  appName         : " + TEST_APP_NAME);
+    System.out.println("  groupName       : " + TEST_GROUP_NAME);
+    System.out.println("  groupBaseDN     : " + TEST_GROUP_BASE_DN);
+    System.out.println("  groupDescription: " + TEST_GROUP_DESC);
+    System.out.println("  fisResourceOwners: " + TEST_FIS_OWNERS);
+    System.out.println("-------------------------------------------------");
 
-String applicationName = "Active Directory";
-String groupName = "TEST_AD_GROUP_001";
-String description = "Test group from workflow";
-String owner = "spadmin";
-String requester = "spadmin";
+    // --- Verify the workflow exists before trying to launch ---
+    Workflow wf = context.getObjectByName(Workflow.class, "WF_CreateADGroup");
+    if (wf == null) {
+        System.out.println("[ERROR] Workflow 'WF_CreateADGroup' not found in IIQ.");
+        System.out.println("        Import WF_CreateADGroup.xml first.");
+        return "FAILED: Workflow not found.";
+    }
+    System.out.println("[OK] Workflow found: " + wf.getName());
 
-/* -------------------------
-   GET WORKFLOW
-------------------------- */
+    // --- Verify the launcher identity exists ---
+    String launcherName = "spadmin";
+    Identity launcher = context.getObjectByName(Identity.class, launcherName);
+    if (launcher == null) {
+        System.out.println("[WARN] Identity '" + launcherName + "' not found, using context default.");
+    } else {
+        System.out.println("[OK] Launcher identity: " + launcher.getName());
+    }
 
-Workflow wf = (Workflow) context.getObjectByName(Workflow.class, "CreateADGroupWorkflow");
+    // --- Build workflow arguments (mirrors the API request body) ---
+    Map wfArgs = new HashMap();
+    wfArgs.put("appName",          TEST_APP_NAME);
+    wfArgs.put("groupName",        TEST_GROUP_NAME);
+    wfArgs.put("groupBaseDN",      TEST_GROUP_BASE_DN);
+    wfArgs.put("groupDescription", TEST_GROUP_DESC);
+    wfArgs.put("fisResourceOwners", TEST_FIS_OWNERS);
+    wfArgs.put("trace",            true);   // enables workflow trace logging
 
-if (wf == null) {
-    throw new Exception("Workflow not found: CreateADGroupWorkflow");
-}
+    // --- Build the WorkflowLaunch ---
+    WorkflowLaunch wfl = new WorkflowLaunch();
+    wfl.setWorkflowName("WF_CreateADGroup");
+    wfl.setWorkflowRef("WF_CreateADGroup");
+    wfl.setCaseName("TEST_CreateADGroup_" + TEST_GROUP_NAME + "_" + System.currentTimeMillis());
+    wfl.setLauncher(launcherName);
+    wfl.setVariables(wfArgs);
 
-/* -------------------------
-   BUILD ARGUMENT MAP
-------------------------- */
+    // --- Launch the workflow ---
+    System.out.println("-------------------------------------------------");
+    System.out.println("[INFO] Launching workflow...");
 
-HashMap launchArgsMap = new HashMap();
+    WorkflowLaunchService wls = new WorkflowLaunchService(context);
+    WorkflowSession session;
 
-launchArgsMap.put("applicationName", applicationName);
-launchArgsMap.put("groupName", groupName);
-launchArgsMap.put("description", description);
-launchArgsMap.put("owner", owner);
-launchArgsMap.put("requester", requester);
+    try {
+        session = wls.launchWorkflow(wfl, null);
+    } catch (Exception e) {
+        System.out.println("[ERROR] Failed to launch workflow: " + e.getMessage());
+        e.printStackTrace();
+        return "FAILED: Launch exception â " + e.getMessage();
+    }
 
-/* -------------------------
-   PREPARE WORKFLOW LAUNCH
-------------------------- */
+    WorkflowLaunch resultLaunch = session.getLaunch();
+    String caseId = resultLaunch.getWorkflowCase() != null
+        ? resultLaunch.getWorkflowCase().getId()
+        : "(no case id)";
 
-WorkflowLaunch wflaunch = new WorkflowLaunch();
+    System.out.println("[INFO] Workflow launched. Case ID: " + caseId);
 
-wflaunch.setWorkflowName(wf.getName());
-wflaunch.setWorkflowRef(wf.getName());
-wflaunch.setCaseName("Create AD Group Test - " + groupName);
-wflaunch.setVariables(launchArgsMap);
+    if (!WAIT_FOR_COMPLETION) {
+        System.out.println("[INFO] WAIT_FOR_COMPLETION=false. Not polling for result.");
+        System.out.println("       Check Monitoring > Active Processes in IIQ for case: " + caseId);
+        return "LAUNCHED (async): case id = " + caseId;
+    }
 
-/* -------------------------
-   LAUNCH WORKFLOW
-------------------------- */
+    // --- Poll for TaskResult ---
+    System.out.println("[INFO] Waiting for workflow to complete (timeout: " + TIMEOUT_SECONDS + "s)...");
 
-Workflower workflower = new Workflower(context);
-WorkflowLaunch launch = workflower.launch(wflaunch);
+    TaskResult taskResult = null;
+    long deadline = System.currentTimeMillis() + (TIMEOUT_SECONDS * 1000L);
+    String taskResultId = resultLaunch.getTaskResultId();
 
-return "Workflow Launched: " + launch.getCaseName();
+    while (System.currentTimeMillis() < deadline) {
+        if (taskResultId != null) {
+            taskResult = context.getObjectById(TaskResult.class, taskResultId);
+        }
+        if (taskResult != null &amp;&amp; taskResult.getCompletionStatus() != null) {
+            break;
+        }
+        Thread.sleep(3000);
+        System.out.println("[INFO] ...still waiting...");
+        // refresh context to pick up DB changes
+        if (taskResult != null) context.decache(taskResult);
+    }
 
+    // --- Print Results ---
+    System.out.println("=================================================");
+    if (taskResult == null) {
+        System.out.println("[WARN] TaskResult not found or timed out.");
+        System.out.println("       Case ID: " + caseId);
+        System.out.println("       Check IIQ logs and Monitoring > Process Instrumentation.");
+        return "TIMEOUT: workflow did not complete within " + TIMEOUT_SECONDS + " seconds.";
+    }
+
+    System.out.println(" Task Result ID  : " + taskResult.getId());
+    System.out.println(" Completion Status: " + taskResult.getCompletionStatus());
+    System.out.println(" Launched         : " + taskResult.getLaunched());
+    System.out.println(" Completed        : " + taskResult.getCompleted());
+
+    // Pull output variables back out
+    Object workItemStatus    = taskResult.getAttribute("workItemStatus");
+    Object provisioningErrors = taskResult.getAttribute("provisioningErrors");
+
+    System.out.println("-------------------------------------------------");
+    System.out.println(" workItemStatus    : " + workItemStatus);
+    System.out.println(" provisioningErrors: " + provisioningErrors);
+    System.out.println("=================================================");
+
+    if ("Success".equals(workItemStatus)) {
+        System.out.println("[PASS] Workflow completed successfully.");
+        System.out.println("       Verify group '" + TEST_GROUP_NAME + "' was created in AD.");
+        return "PASS: workItemStatus=Success";
+    } else {
+        System.out.println("[FAIL] Workflow did not complete successfully.");
+        System.out.println("       Errors: " + provisioningErrors);
+        return "FAIL: workItemStatus=" + workItemStatus + " | errors=" + provisioningErrors;
+    }
   </Source>
 </Rule>
