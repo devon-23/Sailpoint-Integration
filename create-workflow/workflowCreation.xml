@@ -1,117 +1,255 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version='1.0' encoding='UTF-8'?>
 <!DOCTYPE Workflow PUBLIC "sailpoint.dtd" "sailpoint.dtd">
+<Workflow explicitTransitions="true"
+          libraries="Identity,Role,PolicyViolation,LCM,BatchRequest"
+          name="WF_CreateADGroup"
+          taskType="LCM"
+          type="LCMProvisioning">
 
-<Workflow name="CreateADGroupWorkflow" type="Generic">
+  <Variable initializer="false" input="true" name="trace">
+    <Description>Enable trace logging for debugging.</Description>
+  </Variable>
 
-    <!-- VARIABLES -->
+  <!-- ============================================================
+       INPUT VARIABLES (passed via API launch arguments)
+       ============================================================ -->
+  <Variable input="true" name="appName" required="true">
+    <Description>The name of the AD application/source in IIQ (e.g. "Active Directory").</Description>
+  </Variable>
 
-    <Variable name="applicationName" input="true" required="true"/>
-    <Variable name="groupName" input="true" required="true"/>
-    <Variable name="description" input="true"/>
-    <Variable name="owner" input="true"/>
-    <Variable name="requester" input="true"/>
-    <Variable name="result" output="true"/>
+  <Variable input="true" name="groupName" required="true">
+    <Description>The name of the new AD group to create (e.g. "GRP_MyTeam").</Description>
+  </Variable>
 
-    <!-- START STEP -->
+  <Variable input="true" name="groupBaseDN" required="true">
+    <Description>The base DN / OU where the group will be created (e.g. "OU=Groups,DC=corp,DC=example,DC=com").</Description>
+  </Variable>
 
-    <Step name="Start" icon="Start">
-        <Transition to="Validate Inputs"/>
-    </Step>
+  <Variable input="true" name="groupDescription" required="false">
+    <Description>A human-readable description for the new AD group.</Description>
+  </Variable>
 
-    <!-- VALIDATE INPUTS -->
+  <Variable input="true" name="fisResourceOwners" required="false">
+    <Description>Comma-separated list of FIS resource owner usernames or identifiers to set as owners.</Description>
+  </Variable>
 
-    <Step name="Validate Inputs">
+  <!-- ============================================================
+       INTERNAL / OUTPUT VARIABLES
+       ============================================================ -->
+  <Variable name="plan">
+    <Description>The ProvisioningPlan built to create the AD group.</Description>
+  </Variable>
 
-        <Script>
-            <Source>
+  <Variable name="project">
+    <Description>The ProvisioningProject returned after compilation.</Description>
+  </Variable>
 
-import sailpoint.tools.GeneralException;
+  <Variable name="provisioningErrors" output="true">
+    <Description>Any provisioning errors encountered; surfaced back to the API caller.</Description>
+  </Variable>
 
-if (groupName == null || groupName.trim().length() == 0) {
-    throw new GeneralException("Group name is required");
-}
+  <Variable initializer="Pending" name="workItemStatus" output="true">
+    <Description>Final status of the workflow: Success | Failed | Pending.</Description>
+  </Variable>
 
-if (applicationName == null || applicationName.trim().length() == 0) {
-    throw new GeneralException("Application name is required");
-}
+  <Variable name="launcher">
+    <Description>Identity of the workflow initiator â populated automatically from the API call context.</Description>
+    <Script>
+      <Source>
+        import sailpoint.object.Identity;
+        Identity launcher = context.getObjectByName(Identity.class, wfcontext.getLauncher());
+        return (launcher != null) ? launcher.getName() : "spadmin";
+      </Source>
+    </Script>
+  </Variable>
 
-            </Source>
-        </Script>
+  <!-- ============================================================
+       STEP 1 â Validate Inputs
+       ============================================================ -->
+  <Step icon="Start" name="Start" posX="28" posY="128">
+    <Transition to="Validate Inputs"/>
+  </Step>
 
-        <Transition to="Create Entitlement"/>
+  <Step action="call:validateInputs" icon="Task" name="Validate Inputs" posX="128" posY="128" resultVariable="provisioningErrors">
+    <Description>Verify required inputs are present and the application exists in IIQ.</Description>
+    <Transition to="Build Provisioning Plan" when="ref:provisioningErrors == null"/>
+    <Transition to="Handle Error"/>
+  </Step>
 
-    </Step>
+  <!-- ============================================================
+       STEP 2 â Build Provisioning Plan
+       ============================================================ -->
+  <Step action="call:buildProvisioningPlan" icon="Task" name="Build Provisioning Plan" posX="258" posY="128" resultVariable="plan">
+    <Description>Construct the ProvisioningPlan that creates the AD group object.</Description>
+    <Transition to="Compile Project"/>
+  </Step>
 
-    <!-- CREATE ENTITLEMENT -->
+  <!-- ============================================================
+       STEP 3 â Compile Project
+       ============================================================ -->
+  <Step icon="Task" name="Compile Project" posX="388" posY="128">
+    <Description>Compile the ProvisioningPlan into a ProvisioningProject.</Description>
+    <Script>
+      <Source>
+        import sailpoint.api.Provisioner;
+        import sailpoint.object.ProvisioningPlan;
+        import sailpoint.object.ProvisioningProject;
 
-    <Step name="Create Entitlement">
+        Provisioner provisioner = new Provisioner(context);
+        ProvisioningProject proj = provisioner.compile(plan, null, null);
+        workflow.put("project", proj);
+      </Source>
+    </Script>
+    <Transition to="Provision AD Group"/>
+  </Step>
 
-        <Script>
-            <Source>
+  <!-- ============================================================
+       STEP 4 â Provision AD Group
+       ============================================================ -->
+  <Step icon="Task" name="Provision AD Group" posX="518" posY="128">
+    <Description>Execute the ProvisioningProject to create the AD group.</Description>
+    <Script>
+      <Source>
+        import sailpoint.api.Provisioner;
+        import sailpoint.object.ProvisioningProject;
+        import sailpoint.object.ProvisioningResult;
 
-import sailpoint.object.Application;
-import sailpoint.object.ManagedAttribute;
-import sailpoint.object.Identity;
-import sailpoint.tools.GeneralException;
+        Provisioner provisioner = new Provisioner(context);
+        provisioner.execute(project);
 
-Application app = context.getObjectByName(Application.class, applicationName);
+        // Check for errors in the project
+        if (project.getErrors() != null &amp;&amp; !project.getErrors().isEmpty()) {
+            workflow.put("provisioningErrors", project.getErrors().toString());
+            workflow.put("workItemStatus", "Failed");
+        } else {
+            workflow.put("workItemStatus", "Success");
+        }
+      </Source>
+    </Script>
+    <Transition to="Handle Error" when="ref:workItemStatus == &quot;Failed&quot;"/>
+    <Transition to="End"/>
+  </Step>
 
-if (app == null) {
-    throw new GeneralException("Application not found: " + applicationName);
-}
+  <!-- ============================================================
+       STEP 5 â Handle Error
+       ============================================================ -->
+  <Step icon="Task" name="Handle Error" posX="388" posY="258">
+    <Description>Log errors and set the output status before ending.</Description>
+    <Script>
+      <Source>
+        import org.apache.commons.logging.Log;
+        import org.apache.commons.logging.LogFactory;
+        Log log = LogFactory.getLog("WF_CreateADGroup");
+        log.error("WF_CreateADGroup encountered an error: " + provisioningErrors);
+        workflow.put("workItemStatus", "Failed");
+      </Source>
+    </Script>
+    <Transition to="End"/>
+  </Step>
 
-ManagedAttribute group = new ManagedAttribute();
+  <!-- ============================================================
+       STEP 6 â End
+       ============================================================ -->
+  <Step icon="Stop" name="End" posX="648" posY="128">
+    <Description>Workflow complete.</Description>
+  </Step>
 
-group.setApplication(app);
-group.setValue(groupName);
-group.setDisplayName(groupName);
+  <!-- ============================================================
+       RULE METHODS (called via call:methodName above)
+       ============================================================ -->
 
-if (description != null) {
-    group.setAttribute("description", description);
-}
+  <!-- validateInputs -->
+  <RuleLibrary>
+    <Source>
+      import sailpoint.object.Application;
 
-if (owner != null) {
+      /**
+       * Validates required inputs and verifies the application exists.
+       * Returns null on success, or an error string on failure.
+       */
+      public String validateInputs() {
+          if (appName == null || appName.trim().equals("")) {
+              return "appName is required.";
+          }
+          if (groupName == null || groupName.trim().equals("")) {
+              return "groupName is required.";
+          }
+          if (groupBaseDN == null || groupBaseDN.trim().equals("")) {
+              return "groupBaseDN is required.";
+          }
 
-    Identity ownerIdentity =
-        context.getObjectByName(Identity.class, owner);
+          Application app = context.getObjectByName(Application.class, appName);
+          if (app == null) {
+              return "Application not found in IIQ: " + appName;
+          }
 
-    if (ownerIdentity != null) {
-        group.setOwner(ownerIdentity);
-    }
+          return null; // no errors
+      }
 
-}
+      /**
+       * Builds a ProvisioningPlan with an ObjectRequest to create the AD group.
+       * Uses AccountRequest type GROUP to create the group object on the connector.
+       */
+      public sailpoint.object.ProvisioningPlan buildProvisioningPlan() {
+          import sailpoint.object.ProvisioningPlan;
+          import sailpoint.object.ProvisioningPlan.AccountRequest;
+          import sailpoint.object.ProvisioningPlan.AttributeRequest;
+          import sailpoint.object.ProvisioningPlan.ObjectRequest;
+          import sailpoint.object.ProvisioningPlan.Operation;
+          import sailpoint.object.Application;
 
-context.saveObject(group);
+          ProvisioningPlan plan = new ProvisioningPlan();
 
-result = "Group created successfully: " + groupName;
+          // --- ObjectRequest: create the AD group ---
+          ObjectRequest objReq = new ObjectRequest();
+          objReq.setApplication(appName);
+          objReq.setType("group");                         // IIQ schema type for AD groups
+          objReq.setOp(ObjectRequest.Operation.Create);
+          objReq.setNativeIdentity(groupName);             // CN or sAMAccountName
 
-            </Source>
-        </Script>
+          // Set the group distinguished name / base OU
+          objReq.add(new AttributeRequest("distinguishedName",
+              Operation.Set,
+              "CN=" + groupName + "," + groupBaseDN));
 
-        <Transition to="Commit Changes"/>
+          // cn
+          objReq.add(new AttributeRequest("cn",
+              Operation.Set,
+              groupName));
 
-    </Step>
+          // sAMAccountName
+          objReq.add(new AttributeRequest("sAMAccountName",
+              Operation.Set,
+              groupName));
 
-    <!-- COMMIT -->
+          // Group description (optional)
+          if (groupDescription != null &amp;&amp; !groupDescription.trim().equals("")) {
+              objReq.add(new AttributeRequest("description",
+                  Operation.Set,
+                  groupDescription));
+          }
 
-    <Step name="Commit Changes">
+          // FIS Resource Owners â stored in extensionAttribute1 (adjust attribute name as needed)
+          if (fisResourceOwners != null &amp;&amp; !fisResourceOwners.trim().equals("")) {
+              objReq.add(new AttributeRequest("extensionAttribute1",
+                  Operation.Set,
+                  fisResourceOwners));
+          }
 
-        <Script>
-            <Source>
+          // groupType: -2147483646 = Global Security Group in AD
+          objReq.add(new AttributeRequest("groupType",
+              Operation.Set,
+              "-2147483646"));
 
-import sailpoint.api.SailPointContext;
+          plan.add(objReq);
 
-context.commitTransaction();
+          // Set the requester for audit trail
+          plan.setRequesters(java.util.Arrays.asList(
+              new sailpoint.object.Identity.NameRef(launcher)));
 
-            </Source>
-        </Script>
-
-        <Transition to="End"/>
-
-    </Step>
-
-    <!-- END -->
-
-    <Step name="End" icon="Stop"/>
+          return plan;
+      }
+    </Source>
+  </RuleLibrary>
 
 </Workflow>
