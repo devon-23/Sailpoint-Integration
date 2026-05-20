@@ -1,0 +1,122 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE Rule PUBLIC "sailpoint.dtd" "sailpoint.dtd">
+<Rule created="1779286050156" id="a8a231a89e3e1918819e45b6856b06f6" language="beanshell" modified="1779300020998" name="Check Long Running Tasks" significantModified="1779300020998">
+  <Description>
+    This rule Checks for tasks running longer than 30 minutes. if found, sends it in an email with the task name
+  </Description>
+  <Source>
+    import sailpoint.api.SailPointContext;
+    import sailpoint.object.EmailOptions;
+    import sailpoint.object.EmailTemplate;
+    import sailpoint.object.TaskResult;
+    import sailpoint.object.QueryOptions; 
+    import sailpoint.object.Filter; 
+
+    import java.sql.Connection;
+    import java.sql.Statement;
+    import java.sql.ResultSet;
+
+    import java.util.List;
+    import java.util.ArrayList;
+    import java.util.Map;
+    import java.util.HashMap;
+  	import java.util.Iterator;    
+    import java.util.Arrays;
+    import java.util.Date;
+  
+ 	 // Long‑running tasks 
+    List longRunningTaskNames = new ArrayList();
+    List longRunningTaskTypes = new ArrayList();
+    List longRunningTaskCreationDatesEST = new ArrayList();
+  
+  	private void buildReport() {
+
+      QueryOptions qo = new QueryOptions();
+
+      Filter statusFilter = Filter.isnull("completionStatus");
+      qo.addFilter(statusFilter);
+
+      qo.addFilter(
+          Filter.and(
+            //  Filter.ne("type", "LCM"),
+              Filter.ne("type", "Workflow"),
+              Filter.ne("type", "Certification")
+          )
+      );
+
+      Iterator results = context.search(TaskResult.class, qo);
+
+      SimpleDateFormat sdf = new SimpleDateFormat("MM/dd/yy, hh:mm:ss a");
+      sdf.setTimeZone(TimeZone.getTimeZone("EST"));
+
+      long now = System.currentTimeMillis();
+
+      while (results.hasNext()) {
+          TaskResult tr = (TaskResult) results.next();
+          Date launchedDate = tr.getLaunched();
+
+          if (launchedDate != null) {
+
+              long launched = launchedDate.getTime();
+              long now = System.currentTimeMillis();
+
+              long diffMinutes = (now - launched) / (1000 * 60);
+
+              if (diffMinutes > 30) {
+
+                  longRunningTaskNames.add(tr.getName());
+                  longRunningTaskTypes.add(tr.getType());
+
+                  longRunningTaskCreationDatesEST.add(sdf.format(launchedDate));
+              }
+          }
+      }
+    }
+
+    buildReport();					
+   
+  if (!longRunningTaskNames.isEmpty()) {
+    
+    EmailTemplate notifyEmail = context.getObjectByName(EmailTemplate.class, "Long Running Tasks");
+
+    // Recipients
+    String[] emailIds = new String[] {
+      //     "test123@gmail.com",
+      "test2@gmail.com"
+    };
+
+    Map mArgs = new HashMap();
+
+    mArgs.put("longRunningTaskNames", longRunningTaskNames);
+    mArgs.put("longRunningTaskTypes", longRunningTaskTypes);
+    mArgs.put("longRunningTaskCreationDatesEST", longRunningTaskCreationDatesEST);
+    
+    for (String em : emailIds) {
+        if (em != null @and em.trim().length() > 0) {
+
+            EmailOptions ops = new EmailOptions();
+            ops.setTo(em.trim());
+            ops.setSendImmediate(true);
+            ops.setNoRetry(true);
+            ops.addVariables(mArgs);
+
+            context.sendEmailNotification(notifyEmail, ops);
+        }
+    }
+  }
+	
+//	taskResult.addMessage("Long Running Task Names === " + longRunningTaskNames);
+//	taskResult.addMessage("Long Running Task Types === " + longRunningTaskTypes);
+//	taskResult.addMessage("Long Running Task Creation Dates === " + longRunningTaskCreationDatesEST);
+	
+	// taskResult.addMessage("Health Monitor email sent to distribution list.");
+
+ //   context.saveObject(taskResult);
+    context.commitTransaction();
+
+  //  taskResult.addMessage("Complete...");
+
+    return longRunningTaskNames.size();
+  
+  </Source>
+</Rule>
